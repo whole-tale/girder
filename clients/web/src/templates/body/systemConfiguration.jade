@@ -7,12 +7,40 @@ form.g-settings-form(role="form")
       type="text", value="#{settings['core.cookie_lifetime'] || ''}",
       placeholder="Default: #{defaults['core.cookie_lifetime'] || ''}",
       title="How long users will stay logged in.")
-  .form-group
-    label(for="g-core-smtp-host") SMTP host
-    input#g-core-smtp-host.form-control.input-sm(
-      type="text", value="#{settings['core.smtp_host'] || ''}",
-      placeholder="Default: #{defaults['core.smtp_host'] || ''}",
-      title="The address of the SMTP server used to send emails.")
+  .g-settings-form-container
+    // TODO: add proper styling to this header
+    h4 Email Settings
+    div
+      label(for="g-core-smtp-host") SMTP host
+      input#g-core-smtp-host.form-control.input-sm(
+        type="text", value="#{settings['core.smtp_host'] || ''}",
+        placeholder="Default: #{defaults['core.smtp_host'] || ''}",
+        title="The hostname of the SMTP server used to send emails.")
+    div
+      label(for="g-core-smtp-port") SMTP port
+      input#g-core-smtp-port.form-control.input-sm(
+        type="text", value="#{settings['core.smtp.port'] || ''}",
+        placeholder="Default: #{defaults['core.smtp.port'] || ''}",
+        title="The port number of the SMTP server used to send emails.")
+    div
+      label(for="g-core-smtp-encryption") SMTP encryption
+      select#g-core-smtp-encryption.form-control.input-sm
+        option(value="none", selected=(settings['core.smtp.encryption'] === "none")) None
+        option(value="starttls", selected=(settings['core.smtp.encryption'] === "starttls")) Use STARTTLS
+        option(value="ssl", selected=(settings['core.smtp.encryption'] === "ssl")) Use SSL/TLS
+    div
+      label(for="g-core-smtp-username") SMTP username
+      input#g-core-smtp-username.form-control.input-sm(
+        type="text", value="#{settings['core.smtp.username'] || ''}",
+        placeholder="Default: #{defaults['core.smtp.username'] || ''}",
+        title="The username, if any, used to authenticate to the SMTP server used to send emails.")
+    div
+      label(for="g-core-smtp-password") SMTP password
+      input#g-core-smtp-password.form-control.input-sm(
+        type="text", value="#{settings['core.smtp.password'] || ''}",
+        placeholder="Default: #{defaults['core.smtp.password'] || ''}",
+        title="The password, if any, used to authenticate to the SMTP server used to send emails.")
+
   .form-group
     label(for="g-core-email-from-address") Email from address
     input#g-core-email-from-address.form-control.input-sm(
