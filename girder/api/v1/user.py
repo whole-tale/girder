@@ -51,6 +51,7 @@ class User(Resource):
         self.route('PUT', ('password', 'temporary'),
                    self.generateTemporaryPassword)
         self.route('DELETE', ('password',), self.resetPassword)
+        self.route('DELETE', (':id', 'api_key'), self.deleteApiKey)
 
     @access.public
     def find(self, params):
@@ -105,15 +106,15 @@ class User(Resource):
             if not authHeader:
                 authHeader = cherrypy.request.headers.get('Authorization')
 
-            if not authHeader or not authHeader[0:6] == 'Basic ':
-                raise RestException('Use HTTP Basic Authentication', 401)
+            if not authHeader or not authHeader[:6] == 'Basic ':
+                raise AccessException('Use HTTP Basic Authentication')
 
             try:
                 credentials = base64.b64decode(authHeader[6:]).decode('utf8')
                 if ':' not in credentials:
                     raise TypeError
             except Exception:
-                raise RestException('Invalid HTTP Authorization header', 401)
+                raise AccessException('Invalid HTTP Authorization header')
 
             login, password = credentials.split(':', 1)
 
@@ -122,12 +123,13 @@ class User(Resource):
 
             user = self.model('user').findOne({loginField: login})
             if user is None:
-                raise RestException('Login failed.', code=403)
+                raise AccessException('Login failed.')
 
-            if not self.model('password').authenticate(user, password):
-                raise RestException('Login failed.', code=403)
+            if (not self.model('user').testApiKey(user, key=password) and
+                    not self.model('password').authenticate(user, password)):
+                raise AccessException('Login failed.')
 
-            setattr(cherrypy.request, 'girderUser', user)
+            cherrypy.request.girderUser = user
             token = self.sendAuthTokenCookie(user)
 
         return {
@@ -141,7 +143,12 @@ class User(Resource):
     login.description = (
         Description('Log in to the system.')
         .notes('Pass your username and password using HTTP Basic Auth. Sends'
-               ' a cookie that should be passed back in future requests.')
+               ' a cookie that should be passed back in future requests. You '
+               ' may also use your API key instead of your password.')
+        .param('Girder-Authorization', 'The string "Basic" followed by a space '
+               'followed by the base-64 encoding of your username and password '
+               'separated by a ":". You may also pass your API key instead '
+               'of your password.', paramType='header')
         .errorResponse('Missing Authorization header.', 401)
         .errorResponse('Invalid login or password.', 403))
 
@@ -181,7 +188,7 @@ class User(Resource):
             lastName=params['lastName'], admin=admin)
 
         if currentUser is None:
-            setattr(cherrypy.request, 'girderUser', user)
+            cherrypy.request.girderUser = user
             self.sendAuthTokenCookie(user)
 
         return self.model('user').filter(user, user)
@@ -396,4 +403,14 @@ class User(Resource):
                'from this method, so be sure to record it somewhere safe.')
         .param('id', 'The ID of the user for whom to generate the key.',
                paramType='path')
+        .errorResponse('Admin access denied on the given user.', 403))
+
+    @access.user
+    @loadmodel(model='user', level=AccessType.ADMIN)
+    def deleteApiKey(self, user, params):
+        self.model('user').removeApiKey(user)
+        return {'message': 'Deleted API key.'}
+    deleteApiKey.description = (
+        Description('Remove an existing API key for a user.')
+        .param('id', 'The ID of the user.')
         .errorResponse('Admin access denied on the given user.', 403))

@@ -132,13 +132,13 @@ class UserTestCase(base.TestCase):
         # Login with unregistered email
         resp = self.request(path='/user/authentication', method='GET',
                             basicAuth='incorrect@email.com:badpassword')
-        self.assertStatus(resp, 403)
+        self.assertStatus(resp, 401)
         self.assertEqual('Login failed.', resp.json['message'])
 
         # Correct email, but wrong password
         resp = self.request(path='/user/authentication', method='GET',
                             basicAuth='good@email.com:badpassword')
-        self.assertStatus(resp, 403)
+        self.assertStatus(resp, 401)
         self.assertEqual('Login failed.', resp.json['message'])
 
         # Login successfully with email
@@ -153,7 +153,7 @@ class UserTestCase(base.TestCase):
         # Invalid login
         resp = self.request(path='/user/authentication', method='GET',
                             basicAuth='badlogin:good:password')
-        self.assertStatus(resp, 403)
+        self.assertStatus(resp, 401)
         self.assertEqual('Login failed.', resp.json['message'])
 
         # Login successfully with fallback Authorization header
@@ -197,7 +197,7 @@ class UserTestCase(base.TestCase):
         # Login unsuccessfully
         resp = self.request(path='/user/authentication', method='GET',
                             basicAuth='goodlogin:badpassword')
-        self.assertStatus(resp, 403)
+        self.assertStatus(resp, 401)
         self.assertEqual('Login failed.', resp.json['message'])
 
         # Login successfully
@@ -402,7 +402,7 @@ class UserTestCase(base.TestCase):
         # Old password should no longer work
         resp = self.request(path='/user/authentication', method='GET',
                             basicAuth='user@user.com:passwd')
-        self.assertStatus(resp, 403)
+        self.assertStatus(resp, 401)
 
         self.assertTrue(base.mockSmtp.waitForMail())
         msg = base.mockSmtp.getMail()

@@ -72,6 +72,30 @@ girder.views.UserAccountView = girder.View.extend({
             } else {
                 this.user.adminChangePassword(this.$('#g-password-new').val());
             }
+        },
+        'click .g-generate-api-key': function () {
+            if (this.user.get('hasApiKey')) {
+                girder.confirm({
+                    text: 'You already have an API key. Generating a new one ' +
+                          'will delete your existing key, causing any clients ' +
+                          'using that key to stop working. Are you sure?',
+                    yesClass: 'btn-primary',
+                    confirmCallback: _.bind(function () {
+                        this.generateApiKey();
+                    }, this)
+                });
+            } else {
+                this.generateApiKey();
+            }
+        },
+        'click .g-delete-api-key': function () {
+            girder.confirm({
+                text: 'Are you sure you want to delete your API key? Any ' +
+                      'applications using it will no longer work.',
+                confirmCallback: _.bind(function () {
+                    this.removeApiKey();
+                }, this)
+            })
         }
     },
 
@@ -122,6 +146,26 @@ girder.views.UserAccountView = girder.View.extend({
         }, this);
 
         return this;
+    },
+
+    generateApiKey: function () {
+        this.user.generateApiKey().once('g:apiKeyCreated', function (resp) {
+            this.render();
+            this.$('.g-api-key-container').removeClass('hide')
+                .find('.g-api-key').text(resp.apiKey);
+        }, this);
+    },
+
+    removeApiKey: function () {
+        this.user.removeApiKey().once('g:apiKeyDeleted', function (resp) {
+            this.render();
+            girder.events.trigger('g:alert', {
+                icon: 'ok',
+                text: 'API key removed.',
+                type: 'success',
+                timeout: 4000
+            });
+        }, this);
     }
 });
 

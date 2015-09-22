@@ -45,7 +45,7 @@ class User(AccessControlledModel):
             '_id', 'login', 'public', 'firstName', 'lastName', 'admin',
             'created'))
         self.exposeFields(level=AccessType.ADMIN, fields=(
-            'size', 'email', 'groups', 'groupInvites'))
+            'size', 'email', 'groups', 'groupInvites', 'hasApiKey'))
 
     def filter(self, user, currentUser):
         """Preserved override for kwarg backwards compatibility."""
@@ -327,6 +327,32 @@ class User(AccessControlledModel):
         :returns: The created key.
         """
         user['apiKey'] = genToken()
+        user['hasApiKey'] = True
         self.save(user)
 
         return user['apiKey']
+
+    def testApiKey(self, user, key):
+        """
+        Test whether the given API key is correct for the given user. This can
+        be used to authenticate a user, as an alternative to using the user's
+        password. Returns False if the user has no API key.
+
+        :param user: The user to test.
+        :type user: dict
+        :param key: The API key to test.
+        :type key: str
+        :returns: bool, whether or not the API key is correct.
+        """
+        actual = user.get('apiKey')
+        return bool(actual and key == actual)
+
+    def removeApiKey(self, user):
+        """
+        Remove a user's API key.
+        """
+        if 'apiKey' in user:
+            del user['apiKey']
+
+        user['hasApiKey'] = False
+        self.save(user)

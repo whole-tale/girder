@@ -86,9 +86,9 @@ def _cacheAuthUser(fun):
 
         user = fun(returnToken, *args, **kwargs)
         if type(user) is tuple:
-            setattr(cherrypy.request, 'girderUser', user[0])
+            cherrypy.request.girderUser = user[0]
         else:
-            setattr(cherrypy.request, 'girderUser', user)
+            cherrypy.request.girderUser = user
 
         return user
     return inner
@@ -105,7 +105,7 @@ def _cacheAuthToken(fun):
             return cherrypy.request.girderToken
 
         token = fun(*args, **kwargs)
-        setattr(cherrypy.request, 'girderToken', token)
+        cherrypy.request.girderToken = token
 
         return token
     return inner
@@ -388,7 +388,7 @@ def ensureTokenScopes(token, scope):
     """
     tokenModel = ModelImporter.model('token')
     if not tokenModel.hasScope(token, scope):
-        setattr(cherrypy.request, 'girderUser', None)
+        cherrypy.request.girderUser = None
         if isinstance(scope, six.string_types):
             scope = (scope,)
         raise AccessException(

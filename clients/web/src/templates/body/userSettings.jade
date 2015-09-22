@@ -1,19 +1,23 @@
 .g-account-header
-  .g-user-name.g-body-title #{user.name()}
-  .g-user-description.g-body-subtitle #{user.get('login')}
+  .g-user-name.g-body-title= user.name()
+  .g-user-description.g-body-subtitle= user.get('login')
 
 ul.g-account-tabs.nav.nav-tabs
   li.active
-    a(href="#g-account-tab-info", data-toggle="tab", name="info")
+    a(href="#g-account-tab-info" data-toggle="tab" name="info")
       i.icon-info-circled
       |  Profile
   li
-    a(href="#g-account-tab-password", data-toggle="tab", name="password")
+    a(href="#g-account-tab-password" data-toggle="tab" name="password")
       i.icon-lock
       | Password
+  li
+    a(href="#g-account-tab-apikey" data-toggle="tab" name="apikey")
+      i.icon-key-1
+      | API key
 
 .tab-content
-  #g-account-tab-info.tab-pane.active
+  #g-account-tab-info.g-useraccount-tab.tab-pane.active
     .g-user-info-container
       form#g-user-info-form(role="form")
         .form-group
@@ -39,22 +43,49 @@ ul.g-account-tabs.nav.nav-tabs
           i.icon-edit
           | Save
         #g-user-info-error-msg.g-validation-failed-message
-  #g-account-tab-password.tab-pane
+  #g-account-tab-password.g-useraccount-tab.tab-pane
     .g-password-change-container
       form#g-password-change-form(role="form")
         if temporaryToken
-            input.input-sm.form-control#g-password-old(type="hidden", value="#{temporaryToken}")
+            input.input-sm.form-control#g-password-old(type="hidden" value="#{temporaryToken}")
         else if isCurrentUser
           .form-group
             label(for="g-password-old") Current password
-            input.input-sm.form-control#g-password-old(type="password", placeholder="Enter current password")
+            input.input-sm.form-control#g-password-old(type="password" placeholder="Enter current password")
         .form-group
           label(for="g-password-new") New password
-          input.input-sm.form-control#g-password-new(type="password", placeholder="Enter new password")
+          input.input-sm.form-control#g-password-new(type="password" placeholder="Enter new password")
         .form-group
           label(for="g-password-retype") Retype new password
-          input.input-sm.form-control#g-password-retype(type="password", placeholder="Retype new password")
+          input.input-sm.form-control#g-password-retype(type="password" placeholder="Retype new password")
         button.btn.btn-default.btn-sm(type="submit")
           i.icon-lock
           | Change
         #g-password-change-error-msg.g-validation-failed-message
+  #g-account-tab-apikey.g-useraccount-tab.tab-pane
+    .g-api-key-explanation
+      p.
+        You can generate an API key that can be used in lieu of your password to
+        authenticate your user. This can be useful for programmatic scripts that
+        need to interact with Girder on your behalf.
+      p.
+        Note that you may only have one API key active on your user at a time.
+        Generating a new one will erase a previously created API key if you have
+        one, rendering the old key invalid.
+
+    .g-api-key-container.hide
+      p.
+        #[span.g-warning WARNING]: This is the only time you will be able to
+        view this API key, it will never be visible again. Make sure you record
+        it somewhere safe.
+      p Your API key:
+      .g-api-key
+
+    .g-api-key-buttons
+      if user.get('hasApiKey')
+        button.g-delete-api-key.btn.btn-danger
+          i.icon-cancel
+          | Delete current key
+      button.g-generate-api-key.btn.btn-primary
+        i.icon-key-inv
+        |  Generate new key

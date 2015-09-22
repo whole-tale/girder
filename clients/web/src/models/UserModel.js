@@ -118,5 +118,27 @@ girder.models.UserModel = girder.Model.extend({
         }, this)).error(_.bind(function (err) {
             this.trigger('g:error', err);
         }, this));
+    },
+
+    generateApiKey: function () {
+        girder.restRequest({
+            path: this.resourceName + '/' + this.id + '/api_key',
+            type: 'POST'
+        }).done(_.bind(function (resp) {
+            this.set('hasApiKey', true);
+            this.trigger('g:apiKeyCreated', resp);
+        }, this));
+        return this;
+    },
+
+    removeApiKey: function () {
+        girder.restRequest({
+            path: this.resourceName + '/' + this.id + '/api_key',
+            type: 'DELETE'
+        }).done(_.bind(function (resp) {
+            this.set('hasApiKey', false);
+            this.trigger('g:apiKeyDeleted', resp);
+        }, this));
+        return this;
     }
 });
