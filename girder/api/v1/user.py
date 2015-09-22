@@ -42,6 +42,7 @@ class User(Resource):
         self.route('GET', ('authentication',), self.login)
         self.route('GET', (':id',), self.getUser)
         self.route('POST', (), self.createUser)
+        self.route('POST', (':id', 'api_key'), self.createApiKey)
         self.route('PUT', (':id',), self.updateUser)
         self.route('PUT', ('password',), self.changePassword)
         self.route('PUT', (':id', 'password'), self.changeUserPassword)
@@ -382,3 +383,17 @@ class User(Resource):
         .param('token', 'The token to check.')
         .errorResponse('The token does not grant temporary access to the '
                        'specified user.', 403))
+
+    @access.user
+    @loadmodel(model='user', level=AccessType.ADMIN)
+    def createApiKey(self, user, params):
+        return {'apiKey': self.model('user').createApiKey(user)}
+    createApiKey.description = (
+        Description('Generate a new API key.')
+        .notes('Warning: this will delete any previously created API key for '
+               'the user and replace it with the new key, so use with caution. '
+               'Also, this key will never be visible again after the response '
+               'from this method, so be sure to record it somewhere safe.')
+        .param('id', 'The ID of the user for whom to generate the key.',
+               paramType='path')
+        .errorResponse('Admin access denied on the given user.', 403))

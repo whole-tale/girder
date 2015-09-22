@@ -23,6 +23,7 @@ import re
 
 from .model_base import AccessControlledModel, ValidationException
 from girder.constants import AccessType
+from girder.models.token import genToken
 from girder.utility import config
 
 
@@ -316,3 +317,16 @@ class User(AccessControlledModel):
             folder, includeItems=includeItems, user=user, level=level)
             for folder in folders)
         return count
+
+    def createApiKey(self, user):
+        """
+        Generate and save a new API key for the given user. This overwrites the
+        user's previously saved API key if any exists.
+
+        :param user: The user to create the API key for.
+        :returns: The created key.
+        """
+        user['apiKey'] = genToken()
+        self.save(user)
+
+        return user['apiKey']

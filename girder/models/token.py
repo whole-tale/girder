@@ -36,11 +36,17 @@ except NotImplementedError:  # pragma: no cover
 
 def genToken(length=64):
     """
-    Use this utility function to generate a random string of
-    a desired length.
+    Use this utility function to generate a random string of a desired length.
+    This uses a cryptographically secure random source on platforms that
+    support it.
+
+    :param length: The length of the random token.
+    :type length: int
+    :returns: A string of length ``length`` in the alphabet of lowercase and
+        uppercase letters, plus the digits 0-9.
     """
     return ''.join(random.choice(string.ascii_letters + string.digits)
-                   for x in range(length))
+                   for x in six.moves.range(length))
 
 
 class Token(AccessControlledModel):
