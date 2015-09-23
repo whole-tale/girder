@@ -95,7 +95,7 @@ girder.views.UserAccountView = girder.View.extend({
                 confirmCallback: _.bind(function () {
                     this.removeApiKey();
                 }, this)
-            })
+            });
         }
     },
 
@@ -157,7 +157,7 @@ girder.views.UserAccountView = girder.View.extend({
     },
 
     removeApiKey: function () {
-        this.user.removeApiKey().once('g:apiKeyDeleted', function (resp) {
+        this.user.removeApiKey().once('g:apiKeyDeleted', function () {
             this.render();
             girder.events.trigger('g:alert', {
                 icon: 'ok',
