@@ -221,11 +221,14 @@ class loadmodel(object):
     :type plugin: str
     :param level: Access level, if this is an access controlled model.
     :type level: AccessType
-    :param force:
+    :param force: Force loading of the model (skip access check).
     :type force: bool
+    :param exc: Whether an exception should be raised for a nonexistent
+        resource.
+    :type exc: bool
     """
     def __init__(self, map=None, model=None, plugin='_core', level=None,
-                 force=False):
+                 force=False, exc=True):
         if map is None:
             self.map = {'id': model}
         else:
@@ -234,6 +237,7 @@ class loadmodel(object):
         self.model = ModelImporter.model(model, plugin)
         self.level = level
         self.force = force
+        self.exc = exc
 
     def _getIdValue(self, kwargs, idParam):
         if idParam in kwargs:
@@ -257,7 +261,7 @@ class loadmodel(object):
                 else:
                     kwargs[converted] = self.model.load(id)
 
-                if kwargs[converted] is None:
+                if kwargs[converted] is None and self.exc:
                     raise RestException('Invalid {} id ({}).'
                                         .format(self.model.name, id))
 
