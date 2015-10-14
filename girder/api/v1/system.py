@@ -26,7 +26,7 @@ import six
 import os
 
 from girder.api import access
-from girder.constants import SettingKey, VERSION
+from girder.constants import SettingKey, TokenScope, VERSION
 from girder.models.model_base import GirderException
 from girder.utility import plugin_utilities
 from girder.utility import system
@@ -107,7 +107,7 @@ class System(Resource):
         .errorResponse('You are not a system administrator.', 403)
         .errorResponse('Failed to set system setting.', 500))
 
-    @access.admin
+    @access.admin(scope=TokenScope.READ_SETTINGS)
     def getSetting(self, params):
         getFuncName = 'get'
         funcParams = {}
@@ -144,7 +144,7 @@ class System(Resource):
                'default value of the setting(s).', required=False)
         .errorResponse('You are not a system administrator.', 403))
 
-    @access.admin
+    @access.admin(scope=TokenScope.READ_SETTINGS)
     def getPlugins(self, params):
         """
         Return the plugin information for the system. This includes a list of
@@ -196,7 +196,7 @@ class System(Resource):
         .param('key', 'The key identifying the setting to unset.')
         .errorResponse('You are not a system administrator.', 403))
 
-    @access.admin
+    @access.admin(scope=TokenScope.PARTIAL_UPLOAD_CLEAN)
     def getPartialUploads(self, params):
         limit, offset, sort = self.getPagingParameters(params, 'updated')
         uploadList = list(self.model('upload').list(
@@ -238,7 +238,7 @@ class System(Resource):
                required=False, dataType='int')
         .errorResponse('You are not a system administrator.', 403))
 
-    @access.admin
+    @access.admin(scope=TokenScope.PARTIAL_UPLOAD_CLEAN)
     def discardPartialUploads(self, params):
         uploadList = list(self.model('upload').list(filters=params))
         # Move the results to list that isn't a cursor so we don't have to have
