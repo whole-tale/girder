@@ -14,3 +14,4 @@ __pycache__
 ### PyCharm ###
 .idea/
 /clients/ansible/test-module
+/clients/ansible/test/test.yml
