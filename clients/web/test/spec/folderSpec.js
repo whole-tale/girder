@@ -1,22 +1,24 @@
 /**
  * Start the girder backbone app.
  */
+/* globals waitsFor, runs, girderTest, expect, describe, it */
+
 $(function () {
     girder.events.trigger('g:appload.before');
     var app = new girder.App({
         el: 'body',
         parentView: null
     });
+    app = app;
     girder.events.trigger('g:appload.after');
 });
 
-function _editFolder(button, buttonText, testValidation)
 /* Show the folder edit dialog and click a button.
  * :param button: the jquery selector for the button.
  * :param buttonText: the expected text of the button.
  * :param testValidation: if true, try to clear the name and select submit.
  */
-{
+function _editFolder(button, buttonText, testValidation) {
     var oldval;
 
     waitsFor(function () {
@@ -41,15 +43,12 @@ function _editFolder(button, buttonText, testValidation)
     girderTest.waitForDialog();
 
     waitsFor(function () {
-        return $('#g-name').val() !== '';
-    }, 'the dialog to be populated');
-
-    waitsFor(function () {
-        return $(button).text() === buttonText;
-    }, 'the button to appear');
+        return $('#g-name').val() !== '' && $(button).text() === buttonText;
+    }, 'the dialog to be populated and the button to appear');
 
     if (testValidation) {
         runs(function () {
+            expect($('.g-upload-footer').length).toBe(1);
             oldval = $('#g-name').val();
             $('#g-name').val('');
             $('.g-save-folder').click();
@@ -57,8 +56,56 @@ function _editFolder(button, buttonText, testValidation)
         waitsFor(function () {
             return $('.g-validation-failed-message').text() === 'Folder name must not be empty.';
         }, 'the validation to fail.');
+
         runs(function () {
             $('#g-name').val(oldval);
+            girderTest.sendFile('clients/web/test/testFile.txt',
+                                '.g-markdown-drop-zone .g-file-input');
+        });
+
+        waitsFor(function () {
+            return $('#g-alerts-container .alert-danger').text().indexOf(
+                'Only files with the following extensions are allowed: ' +
+                'png, jpg, jpeg, gif.') !== -1;
+        }, 'allowed extension message to show up');
+
+        runs(function () {
+            girderTest.sendFile('clients/web/test/fake.jpg',
+                                '.g-markdown-drop-zone .g-file-input');
+        });
+
+        waitsFor(function () {
+            return $('#g-dialog-container .g-markdown-text').val().indexOf(
+                '![fake.jpg](' + girder.apiRoot) !== -1;
+        }, 'image to be attached to the markdown');
+
+        runs(function () {
+            expect($('#g-dialog-container .g-markdown-text').val()).toMatch(
+                /!\[fake\.jpg]\(.*\/download\)/);
+            $('#g-dialog-container .g-preview-link').click();
+        });
+
+        waitsFor(function () {
+            return $('.g-markdown-preview img').length === 1;
+        }, 'preview to show the uploaded image');
+
+        /* Test drag-and-drop.  Don't bother actually transferring a file --
+         * that functionality is already tested. */
+        runs(function () {
+            $('#g-dialog-container .g-write-link').click();
+        });
+        waitsFor(function () {
+            return $('.g-markdown-text:visible').length > 0;
+        }, 'the write tab to be visible');
+
+        runs(function () {
+            girderTest.testUploadDropAction(
+                10 * 1024 * 1024 + 1, 1, '.g-markdown-drop-zone',
+                '.g-markdown-text.dragover');
+            waitsFor(function () {
+                return $('#g-alerts-container .alert-danger').text().indexOf(
+                    'That file is too large.') !== -1;
+            }, 'file too large message to show up');
         });
     }
 
@@ -84,7 +131,7 @@ describe('Test folder creation, editing, and deletion', function () {
         });
 
         runs(function () {
-            $("a.g-user-link:contains('Admin')").click();
+            $('a.g-user-link:contains("Admin")').click();
         });
 
         waitsFor(function () {
@@ -93,7 +140,7 @@ describe('Test folder creation, editing, and deletion', function () {
 
         // check for actions menu
         runs(function () {
-            expect($("button:contains('Actions')").length).toBe(1);
+            expect($('button:contains("Actions")').length).toBe(1);
         });
     });
 
@@ -123,7 +170,7 @@ describe('Test folder creation, editing, and deletion', function () {
         });
 
         runs(function () {
-            $("a.g-user-link:contains('Admin')").click();
+            $('a.g-user-link:contains("Admin")').click();
         });
 
         waitsFor(function () {
@@ -132,7 +179,7 @@ describe('Test folder creation, editing, and deletion', function () {
 
         // check for actions menu
         runs(function () {
-            expect($("button:contains('Actions')").length).toBe(1);
+            expect($('button:contains("Actions")').length).toBe(1);
         });
     });
 
@@ -173,6 +220,7 @@ describe('Test folder creation, editing, and deletion', function () {
         }, 'the cancel button of the folder create dialog to appear');
 
         runs(function () {
+            expect($('.g-upload-footer').length).toBe(0);
             $('.g-save-folder').click();
         });
         waitsFor(function () {
@@ -224,7 +272,7 @@ describe('Test folder creation, editing, and deletion', function () {
             return $('.breadcrumb .active:contains("Test Folder Name")').length === 1;
         }, 'the folder page to load');
         runs(function () {
-            expect($('.breadcrumb .active').text()).toBe("Test Folder Name");
+            expect($('.breadcrumb .active').text()).toBe('Test Folder Name');
         });
     });
 
@@ -290,7 +338,7 @@ describe('Test folder creation, editing, and deletion', function () {
         girderTest.waitForLoad();
 
         runs(function () {
-            expect($(".g-widget-metadata-row").length).toNotBe(0);
+            expect($('.g-widget-metadata-row').length).toNotBe(0);
             $('i.icon-level-up').click();
         });
 
@@ -301,7 +349,7 @@ describe('Test folder creation, editing, and deletion', function () {
 
         runs(function () {
             /* This folder shouldn't show any metadata */
-            expect($(".g-widget-metadata-row").length).toBe(0);
+            expect($('.g-widget-metadata-row').length).toBe(0);
             $('a.g-breadcrumb-link').click();
         });
 
@@ -369,7 +417,7 @@ describe('Test folder creation, editing, and deletion', function () {
         girderTest.waitForLoad();
 
         runs(function () {
-            expect($('.breadcrumb .active').text()).toBe("Public");
+            expect($('.breadcrumb .active').text()).toBe('Public');
         });
     });
 });
