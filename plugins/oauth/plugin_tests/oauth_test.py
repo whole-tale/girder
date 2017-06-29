@@ -27,6 +27,7 @@ import requests
 import six
 
 from girder.constants import SettingKey
+from girder.models.model_base import ValidationException
 from tests import base
 
 
@@ -133,6 +134,48 @@ class OauthTest(base.TestCase):
         self.assertStatusOk(resp)
         # No need to re-fetch and test all of these settings values; they will
         # be implicitly tested later
+
+    def _testOauthTokenAsParam(self, providerInfo):
+        self.accountType = 'existing'
+
+        def _getCallbackParams(providerInfo, redirect):
+            resp = self.request('/oauth/provider', params={
+                'redirect': redirect,
+                'list': True
+            })
+            self.assertStatusOk(resp)
+            providerResp = resp.json[0]
+            resp = requests.get(providerResp['url'], allow_redirects=False)
+            self.assertEqual(resp.status_code, 302)
+            callbackLoc = urllib.parse.urlparse(resp.headers['location'])
+            self.assertEqual(
+                callbackLoc.path, r'/api/v1/oauth/%s/callback' % providerInfo['id'])
+            callbackLocQuery = urllib.parse.parse_qs(callbackLoc.query)
+            self.assertNotHasKeys(callbackLocQuery, ('error',))
+            callbackParams = {
+                key: val[0] for key, val in six.viewitems(callbackLocQuery)
+            }
+            return callbackParams
+
+        redirect = 'http://localhost/#foo/bar?token={girderToken}'
+        params = _getCallbackParams(providerInfo, redirect)
+
+        resp = self.request(
+            '/oauth/%s/callback' % providerInfo['id'], params=params, isJson=False)
+        self.assertStatus(resp, 303)
+        self.assertTrue('girderToken' in resp.cookie)
+        self.assertEqual(
+            resp.headers['Location'],
+            redirect.format(girderToken=resp.cookie['girderToken'].value))
+
+        redirect = 'http://localhost/#foo/bar?token={foobar}'
+        params = _getCallbackParams(providerInfo, redirect)
+
+        resp = self.request(
+            '/oauth/%s/callback' % providerInfo['id'], params=params, isJson=False)
+        self.assertStatus(resp, 303)
+        self.assertTrue('girderToken' in resp.cookie)
+        self.assertEqual(resp.headers['Location'], redirect)
 
     def _testOauth(self, providerInfo):
         # Close registration to start off, and simulate a new user
@@ -275,8 +318,12 @@ class OauthTest(base.TestCase):
         # Try callback for the 'existing' account, which should succeed
         existing = doOauthLogin('existing')
 
-        # Try callback for the 'new' account, with open registration
-        self.model('setting').set(SettingKey.REGISTRATION_POLICY, 'open')
+        # Hit validation exception on ignore registration policy setting
+        with self.assertRaises(ValidationException):
+            self.model('setting').set(PluginSettings.IGNORE_REGISTRATION_POLICY, 'foo')
+
+        # Try callback for the 'new' account, with registration policy ignored
+        self.model('setting').set(PluginSettings.IGNORE_REGISTRATION_POLICY, True)
         new = doOauthLogin('new')
 
         # Password login for 'new' OAuth-only user should fail gracefully
@@ -375,6 +422,10 @@ class OauthTest(base.TestCase):
             }
         }
 
+        # Test inclusion of custom scope
+        from girder.plugins.oauth.providers.google import Google
+        Google.addScopes(['custom_scope', 'foo'])
+
         @httmock.urlmatch(scheme='https', netloc='^accounts.google.com$',
                           path='^/o/oauth2/auth$', method='GET')
         def mockGoogleRedirect(url, request):
@@ -382,7 +433,7 @@ class OauthTest(base.TestCase):
                 params = urllib.parse.parse_qs(url.query)
                 self.assertEqual(params['response_type'], ['code'])
                 self.assertEqual(params['access_type'], ['online'])
-                self.assertEqual(params['scope'], ['profile email'])
+                self.assertEqual(params['scope'], ['profile email custom_scope foo'])
             except (KeyError, AssertionError) as e:
                 return {
                     'status_code': 400,
@@ -910,6 +961,7 @@ class OauthTest(base.TestCase):
             self.mockOtherRequest
         ):
             self._testOauth(providerInfo)
+            self._testOauthTokenAsParam(providerInfo)
 
     def testLinkedinOauth(self):  # noqa
         providerInfo = {

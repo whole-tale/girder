@@ -233,6 +233,47 @@ class FolderTestCase(base.TestCase):
             })
         self.assertStatus(resp, 200)
 
+    def testReuseExisting(self):
+        self.ensureRequiredParams(
+            path='/folder', method='POST', required=['name', 'parentId'],
+            user=self.admin)
+
+        # Grab the default user folders
+        resp = self.request(
+            path='/folder', method='GET', user=self.admin, params={
+                'parentType': 'user',
+                'parentId': self.admin['_id'],
+                'sort': 'name',
+                'sortdir': 1
+            })
+        publicFolder = resp.json[1]
+
+        # Actually create subfolder under Public
+        newFolder = self.request(
+            path='/folder', method='POST', user=self.admin, params={
+                'name': ' My public subfolder  ',
+                'parentId': publicFolder['_id']
+            })
+        self.assertStatusOk(newFolder)
+
+        # Try to create a folder with same name, reuseExisting flag not set
+        resp = self.request(
+            path='/folder', method='POST', user=self.admin, params={
+                'name': ' My public subfolder  ',
+                'parentId': publicFolder['_id']
+            })
+        self.assertValidationError(resp, 'name')
+
+        # Create folder with same name, reuseExisting flag set
+        reuseFolder = self.request(
+            path='/folder', method='POST', user=self.admin, params={
+                'name': ' My public subfolder  ',
+                'parentId': publicFolder['_id'],
+                'reuseExisting': True
+            })
+        self.assertStatusOk(reuseFolder)
+        self.assertEqual(newFolder.json['_id'], reuseFolder.json['_id'])
+
     def testFolderMetadataCrud(self):
         """
         Test CRUD of metadata on folders
@@ -296,12 +337,10 @@ class FolderTestCase(base.TestCase):
                             method='PUT', user=self.admin,
                             body=json.dumps(metadata), type='application/json')
         self.assertStatus(resp, 400)
-        self.assertEqual(resp.json['message'],
-                         'The key name foo.bar must not contain a period' +
-                         ' or begin with a dollar sign.')
+        self.assertEqual(
+            resp.json['message'], 'Invalid key foo.bar: keys must not contain the "." character.')
 
-        # Make sure metadata cannot be added if the key begins with a
-        # dollar sign
+        # Make sure metadata cannot be added if the key begins with a $
         metadata = {
             '$foobar': 'alsonotallowed'
         }
@@ -309,9 +348,26 @@ class FolderTestCase(base.TestCase):
                             method='PUT', user=self.admin,
                             body=json.dumps(metadata), type='application/json')
         self.assertStatus(resp, 400)
-        self.assertEqual(resp.json['message'],
-                         'The key name $foobar must not contain a period' +
-                         ' or begin with a dollar sign.')
+        self.assertEqual(
+            resp.json['message'],
+            'Invalid key $foobar: keys must not start with the "$" character.')
+
+        # Test allowNull
+        metadata = {
+            'foo': None
+        }
+        resp = self.request(
+            path='/folder/%s/metadata' % folder['_id'], params={'allowNull': True},
+            user=self.admin, method='PUT', body=json.dumps(metadata), type='application/json')
+        self.assertStatusOk(resp)
+        self.assertEqual(resp.json['meta'], metadata)
+
+        # Test delete metadata endpoint
+        resp = self.request(
+            path='/folder/%s/metadata' % folder['_id'], user=self.admin, method='DELETE',
+            body=json.dumps(['foo']), type='application/json')
+        self.assertStatusOk(resp)
+        self.assertEqual(resp.json['meta'], {})
 
     def testDeleteFolder(self):
         cbInfo = {}

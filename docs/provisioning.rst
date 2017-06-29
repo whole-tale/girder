@@ -2,8 +2,8 @@
 
 Provisioning
 ============
-Girder is packaged for provisioning through the popular IT automation tool Ansible. 
-    
+Girder is packaged for provisioning through the popular IT automation tool Ansible.
+
 Specifically, Girder is available as an Ansible role to be fetched through Ansible Galaxy.
 This allows for a user to point their own Ansible playbook at a number of servers and deploy
 Girder with a single command. Provided in Girder are a number of example playbooks to demonstrate
@@ -26,7 +26,7 @@ proxy at http://localhost:9080.
 
 Additionally, our examples support running on a CentOS 7 virtual machine. The above example can be executed on such a machine by running the following command: ::
 
-  GIRDER_EXAMPLE=girder-nginx VAGRANT_BOX=centos/7
+  GIRDER_EXAMPLE=girder-nginx VAGRANT_BOX=centos/7 vagrant up
 
 .. note:: The `centos/7` box requires guest additions in order to work with shared folders. This means you may need the `vagrant-vbguest` plugin.
 

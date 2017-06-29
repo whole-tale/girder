@@ -206,6 +206,26 @@ class Model(ModelImporter):
         raise Exception('Must override validate() in %s model.'
                         % self.__class__.__name__)  # pragma: no cover
 
+    def validateKeys(self, keys):
+        """
+        Validate a set of keys to make sure they are able to be used in the
+        database. This enforces MongoDB rules about key names.
+        @TODO Add recurse=True argument if ``keys`` is a dict.
+
+        :param keys: An iterable of keys to validate.
+        :type keys: iterable
+        :raises: ValidationException
+        """
+        for k in keys:
+            if not k:
+                raise ValidationException('Key names must not be empty.')
+            if '.' in k:
+                raise ValidationException(
+                    'Invalid key %s: keys must not contain the "." character.' % k)
+            if k[0] == '$':
+                raise ValidationException(
+                    'Invalid key %s: keys must not start with the "$" character.' % k)
+
     def initialize(self):
         """
         Subclasses should override this and set the name of the collection as
@@ -740,10 +760,8 @@ class AccessControlledModel(Model):
         if entity not in doc['access']:
             doc['access'][entity] = []
 
-        # First remove any existing permission level for this entity.
-        doc['access'][entity] = [perm for perm in doc['access'][entity]
-                                 if perm['id'] != id]
-
+        key = 'access.' + entity
+        update = {}
         # Add in the new level for this entity unless we are removing access.
         if level is not None:
             entry = {
@@ -752,11 +770,48 @@ class AccessControlledModel(Model):
                 'flags': flags
             }
             entry['flags'] = self._validateFlags(doc, user, entity, entry, force)
-            doc['access'][entity].append(entry)
+            # because we're iterating this operation is not necessarily atomic
+            for index, perm in enumerate(doc['access'][entity]):
+                if perm['id'] == id:
+                    # if the id already exists we want to update with a $set
+                    doc['access'][entity][index] = entry
+                    update['$set'] = {'%s.%s' % (key, index): entry}
+                    break
+            else:
+                doc['access'][entity].append(entry)
+                update['$push'] = {key: entry}
+        # set remove query
+        else:
+            update['$pull'] = {key: {'id': id}}
+            for perm in doc['access'][entity]:
+                if perm['id'] == id:
+                    doc['access'][entity].remove(perm)
 
         if save:
-            doc = self.save(doc)
+            doc = self._saveAcl(doc, update)
 
+        return doc
+
+    def _saveAcl(self, doc, update):
+        if '_id' not in doc:
+            return self.save(doc)
+
+        # copy all other (potentially updated) fields to the update list,
+        # and trigger normal save events
+        if '$set' in update:
+            for propKey in doc:
+                if propKey != 'access':
+                    update['$set'][propKey] = doc[propKey]
+        else:
+            update['$set'] = {k: v for k, v in six.viewitems(doc)
+                              if k != 'access'}
+
+        event = events.trigger('model.%s.save' % self.name, doc)
+        if not event.defaultPrevented:
+            doc = self.collection.find_one_and_update(
+                {'_id': ObjectId(doc['_id'])}, update,
+                return_document=pymongo.ReturnDocument.AFTER)
+            events.trigger('model.%s.save.after' % self.name, doc)
         return doc
 
     def setPublic(self, doc, public, save=False):

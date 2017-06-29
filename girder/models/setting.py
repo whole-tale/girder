@@ -25,7 +25,7 @@ import six
 from ..constants import GIRDER_ROUTE_ID, GIRDER_STATIC_ROUTE_ID, SettingDefault, SettingKey
 from .model_base import Model, ValidationException
 from girder import logprint
-from girder.utility import plugin_utilities, setting_utilities
+from girder.utility import config, plugin_utilities, setting_utilities
 from girder.utility.model_importer import ModelImporter
 from bson.objectid import ObjectId
 
@@ -163,6 +163,17 @@ class Setting(Model):
             if callable(fn):
                 return fn()
         return None
+
+    @staticmethod
+    @setting_utilities.validator(SettingKey.SECURE_COOKIE)
+    def validateSecureCookie(doc):
+        if not isinstance(doc['value'], bool):
+            raise ValidationException('Secure cookie option must be boolean.', 'value')
+
+    @staticmethod
+    @setting_utilities.default(SettingKey.SECURE_COOKIE)
+    def defaultSecureCookie():
+        return config.getConfig()['server']['mode'] == 'production'
 
     @staticmethod
     @setting_utilities.validator(SettingKey.PLUGINS_ENABLED)
@@ -306,7 +317,7 @@ class Setting(Model):
         nonEmptyRoutes = [route for route in doc['value'].values() if route]
         for key in [GIRDER_ROUTE_ID, GIRDER_STATIC_ROUTE_ID]:
             if key not in doc['value'] or not doc['value'][key]:
-                raise ValidationException('Girder and static root must be routeable.')
+                raise ValidationException('Girder and static root must be routable.')
 
         for key in doc['value']:
             if (key != GIRDER_STATIC_ROUTE_ID and doc['value'][key] and

@@ -24,6 +24,7 @@ be restarted for these changes to take effect.
 
 import os
 import pip
+import re
 import select
 import shutil
 import six
@@ -68,11 +69,13 @@ def fix_path(path):
 
 def _getPluginBuildArgs(buildAll, plugins):
     if buildAll:
-        return ['--all-plugins']
-    elif not plugins:  # build only the enabled plugins
+        sortedPlugins = plugin_utilities.getToposortedPlugins()
+        return ['--plugins=%s' % ','.join(sortedPlugins)]
+    elif plugins is None:  # build only the enabled plugins
         settings = model_importer.ModelImporter().model('setting')
         plugins = settings.get(constants.SettingKey.PLUGINS_ENABLED, default=())
-        plugins = list(plugin_utilities.getToposortedPlugins(plugins, ignoreMissing=True))
+
+    plugins = list(plugin_utilities.getToposortedPlugins(plugins, ignoreMissing=True))
 
     # include static-only dependencies that are not in the runtime load set
     staticPlugins = plugin_utilities.getToposortedPlugins(
@@ -104,6 +107,8 @@ def _pipeOutputToProgress(proc, progress):
                 buf = os.read(pipe.fileno(), 1024)
                 if buf:
                     buf = buf.decode('utf8', errors='ignore')
+                    # Remove ANSI escape sequences
+                    buf = re.sub('(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]', '', buf)
                     # Filter out non-printable characters
                     msg = ''.join(c for c in buf if c in string.printable)
                     if msg:
@@ -117,7 +122,8 @@ def _pipeOutputToProgress(proc, progress):
             proc.wait()
 
 
-def runWebBuild(wd=None, dev=False, npm='npm', allPlugins=False, plugins=None, progress=None):
+def runWebBuild(wd=None, dev=False, npm='npm', allPlugins=False, plugins=None, progress=None,
+                noPlugins=False):
     """
     Use this to run `npm install` inside the package. Also builds the web code
     using `npm run build`.
@@ -133,8 +139,12 @@ def runWebBuild(wd=None, dev=False, npm='npm', allPlugins=False, plugins=None, p
     :type plugins: str, list or None
     :param progress: A progress context for reporting output of the tasks.
     :type progress: ``girder.utility.progress.ProgressContext`` or None
+    :param noPlugins: Enable this to build the girder web with no additional plugins.
+    :type noPlugins: bool
     """
-    if isinstance(plugins, six.string_types) and plugins:
+    if noPlugins:
+        plugins = []
+    elif isinstance(plugins, six.string_types):
         plugins = plugins.split(',')
 
     if shutil.which(npm) is None:
@@ -145,7 +155,7 @@ def runWebBuild(wd=None, dev=False, npm='npm', allPlugins=False, plugins=None, p
         ))
         raise Exception('npm executable not found')
 
-    npmInstall = [npm, 'install', '--unsafe-perm']
+    npmInstall = [npm, 'install', '--unsafe-perm', '--no-save']
     if not dev:
         npmInstall.append('--production')
 
@@ -201,7 +211,7 @@ def install_web(opts=None):
     else:
         runWebBuild(
             dev=opts.development, npm=opts.npm, allPlugins=opts.all_plugins,
-            plugins=opts.plugins)
+            plugins=opts.plugins, noPlugins=opts.no_plugins)
 
 
 def install_plugin(opts):
@@ -294,10 +304,10 @@ def main():
 
     plugin.add_argument('--dev', action='store_true',
                         dest='development',
-                        help='Install development dependencies')
+                        help='Install development dependencies.')
 
     plugin.add_argument('--npm', default='npm',
-                        help='specify the full path to the npm executable.')
+                        help='Override the full path to the npm executable.')
 
     plugin.add_argument('plugin', nargs='+',
                         help='Paths of plugins to install.')
@@ -306,20 +316,33 @@ def main():
 
     web.add_argument('--dev', action='store_true',
                      dest='development',
-                     help='Install client development dependencies')
+                     help='Build Girder in development mode.')
 
     web.add_argument('--npm', default='npm',
-                     help='specify the full path to the npm executable.')
-    web.add_argument('--all-plugins', action='store_true',
-                     help='build all available plugins rather than just enabled ones')
-    web.add_argument('--plugins', default='', help='comma-separated list of plugins to build')
+                     help='Override the full path to the npm executable.')
+
     web.add_argument('--watch', action='store_true',
-                     help='watch for changes and rebuild girder core library in dev mode')
+                     help='Watch Girder\'s core, automatically rebuilding in development mode when '
+                          'it changes.')
+
     web.add_argument('--watch-plugin', default='',
-                     help='watch for changes and rebuild a specific plugin in dev mode')
+                     help='Watch a plugin, automatically rebuilding in development mode when it '
+                          'changes.')
 
     web.add_argument('--plugin-prefix', default='plugin',
-                     help='prefix of the generated plugin bundle')
+                     help='When watching a plugin, watch this output bundle name. Defaults to '
+                          '"plugin".')
+
+    pluginGroup = web.add_mutually_exclusive_group()
+
+    pluginGroup.add_argument('--all-plugins', action='store_true',
+                             help='Build all available plugins, rather than just enabled ones.')
+
+    pluginGroup.add_argument('--plugins', default=None,
+                             help='A comma-separated list of plugins to build.')
+
+    pluginGroup.add_argument('--no-plugins', action='store_true',
+                             help='Build only Girder\'s core, with no additional plugins.')
 
     web.set_defaults(func=install_web)
 
@@ -337,6 +360,7 @@ def main():
 
     parsed = parser.parse_args()
     parsed.func(parsed)
+
 
 if __name__ == '__main__':
     main()  # pragma: no cover

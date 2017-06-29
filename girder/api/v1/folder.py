@@ -38,11 +38,13 @@ class Folder(Resource):
         self.route('GET', (':id', 'details'), self.getFolderDetails)
         self.route('GET', (':id', 'access'), self.getFolderAccess)
         self.route('GET', (':id', 'download'), self.downloadFolder)
+        self.route('GET', (':id', 'rootpath'), self.rootpath)
         self.route('POST', (), self.createFolder)
         self.route('PUT', (':id',), self.updateFolder)
         self.route('PUT', (':id', 'access'), self.updateFolderAccess)
         self.route('POST', (':id', 'copy'), self.copyFolder)
         self.route('PUT', (':id', 'metadata'), self.setMetadata)
+        self.route('DELETE', (':id', 'metadata'), self.deleteMetadata)
 
     @access.public(scope=TokenScope.DATA_READ)
     @filtermodel(model='folder')
@@ -212,21 +214,24 @@ class Folder(Resource):
         .param('name', 'Name of the folder.', strip=True)
         .param('description', 'Description for the folder.', required=False,
                default='', strip=True)
-        .param('public', "Whether the folder should be publicly visible. By "
-               "default, inherits the value from parent folder, or in the "
-               "case of user or collection parentType, defaults to False.",
+        .param('reuseExisting', 'Return existing folder if it exists rather than '
+               'creating a new one.', required=False,
+               dataType='boolean', default=False)
+        .param('public', 'Whether the folder should be publicly visible. By '
+               'default, inherits the value from parent folder, or in the '
+               'case of user or collection parentType, defaults to False.',
                required=False, dataType='boolean')
         .errorResponse()
         .errorResponse('Write access was denied on the parent', 403)
     )
-    def createFolder(self, public, parentType, parentId, name, description, params):
+    def createFolder(self, public, parentType, parentId, name, description, reuseExisting, params):
         user = self.getCurrentUser()
         parent = self.model(parentType).load(
             id=parentId, user=user, level=AccessType.WRITE, exc=True)
 
         return self.model('folder').createFolder(
             parent=parent, name=name, parentType=parentType, creator=user,
-            description=description, public=public)
+            description=description, public=public, reuseExisting=reuseExisting)
 
     @access.public(scope=TokenScope.DATA_READ)
     @filtermodel(model='folder')
@@ -278,20 +283,16 @@ class Folder(Resource):
         .notes('Set metadata fields to null in order to delete them.')
         .modelParam('id', model='folder', level=AccessType.WRITE)
         .jsonParam('metadata', 'A JSON object containing the metadata keys to add',
-                   paramType='body')
+                   paramType='body', requireObject=True)
+        .param('allowNull', 'Whether "null" is allowed as a metadata value.', required=False,
+               dataType='boolean', default=False)
         .errorResponse(('ID was invalid.',
                         'Invalid JSON passed in request body.',
                         'Metadata key name was invalid.'))
         .errorResponse('Write access was denied for the folder.', 403)
     )
-    def setMetadata(self, folder, metadata, params):
-        # Make sure we let user know if we can't accept a metadata key
-        for k in metadata:
-            if '.' in k or k[0] == '$':
-                raise RestException('The key name %s must not contain a '
-                                    'period or begin with a dollar sign.' % k)
-
-        return self.model('folder').setMetadata(folder, metadata)
+    def setMetadata(self, folder, metadata, allowNull, params):
+        return self.model('folder').setMetadata(folder, metadata, allowNull=allowNull)
 
     @access.user(scope=TokenScope.DATA_WRITE)
     @filtermodel(model='folder')
@@ -355,3 +356,36 @@ class Folder(Resource):
                 ctx.update(total=self.model('folder').subtreeCount(folder) - 1)
             self.model('folder').clean(folder, progress=ctx)
         return {'message': 'Cleaned folder %s.' % folder['name']}
+
+    @access.user(scope=TokenScope.DATA_WRITE)
+    @filtermodel('folder')
+    @autoDescribeRoute(
+        Description('Delete metadata fields on a folder.')
+        .responseClass('Folder')
+        .modelParam('id', model='folder', level=AccessType.WRITE)
+        .jsonParam(
+            'fields', 'A JSON list containing the metadata fields to delete',
+            paramType='body', schema={
+                'type': 'array',
+                'items': {
+                    'type': 'string'
+                }
+            }
+        )
+        .errorResponse(('ID was invalid.',
+                        'Invalid JSON passed in request body.',
+                        'Metadata key name was invalid.'))
+        .errorResponse('Write access was denied for the folder.', 403)
+    )
+    def deleteMetadata(self, folder, fields, params):
+        return self.model('folder').deleteMetadata(folder, fields)
+
+    @access.public(scope=TokenScope.DATA_READ)
+    @autoDescribeRoute(
+        Description('Get the path to the root of the folder\'s hierarchy.')
+        .modelParam('id', model='folder', level=AccessType.READ)
+        .errorResponse('ID was invalid.')
+        .errorResponse('Read access was denied for the folder.', 403)
+    )
+    def rootpath(self, folder, params):
+        return self.model('folder').parentsToRoot(folder, user=self.getCurrentUser())

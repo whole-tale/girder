@@ -6,6 +6,10 @@ from girder.plugins.jobs.constants import JobStatus
 from girder.utility.model_importer import ModelImporter
 from . import constants
 from .rest import ItemTask
+from .json_tasks import createItemTasksFromJson, configureItemTaskFromJson, \
+    runJsonTasksDescriptionForFolder, runJsonTasksDescriptionForItem
+from .slicer_cli_tasks import configureItemTaskFromSlicerCliXml, createItemTasksFromSlicerCliXml, \
+    runSlicerCliTasksDescriptionForFolder, runSlicerCliTasksDescriptionForItem
 
 
 def _onJobSave(event):
@@ -36,7 +40,7 @@ def _onUpload(event):
     """
     try:
         ref = json.loads(event.info.get('reference'))
-    except ValueError:
+    except (ValueError, TypeError):
         return
 
     if isinstance(ref, dict) and ref.get('type') == 'item_tasks.output':
@@ -53,9 +57,14 @@ def _onUpload(event):
         file = event.info['file']
         item = ModelImporter.model('item').load(file['itemId'], force=True)
 
+        # Add link to job model to the output item
         jobModel.updateJob(job, otherFields={
             'itemTaskBindings.outputs.%s.itemId' % ref['id']: item['_id']
         })
+
+        # Also a link in the item to the job that created it
+        item['createdByJob'] = job['_id']
+        ModelImporter.model('item').save(item)
 
 
 def load(info):
@@ -67,6 +76,7 @@ def load(info):
         'Create new CLIs via automatic introspection.', admin=True)
 
     ModelImporter.model('item').ensureIndex(['meta.isItemTask', {'sparse': True}])
+    ModelImporter.model('item').exposeFields(level=AccessType.READ, fields='createdByJob')
     ModelImporter.model('job', 'jobs').exposeFields(level=AccessType.READ, fields={
         'itemTaskId', 'itemTaskBindings'})
 
@@ -74,3 +84,21 @@ def load(info):
     events.bind('data.process', info['name'], _onUpload)
 
     info['apiRoot'].item_task = ItemTask()
+
+    info['apiRoot'].item.route('POST', (':id', 'item_task_slicer_cli_description'),
+                               runSlicerCliTasksDescriptionForItem)
+    info['apiRoot'].item.route('PUT', (':id', 'item_task_slicer_cli_xml'),
+                               configureItemTaskFromSlicerCliXml)
+    info['apiRoot'].item.route('POST', (':id', 'item_task_json_description'),
+                               runJsonTasksDescriptionForItem)
+    info['apiRoot'].item.route('PUT', (':id', 'item_task_json_specs'),
+                               configureItemTaskFromJson)
+
+    info['apiRoot'].folder.route('POST', (':id', 'item_task_slicer_cli_description'),
+                                 runSlicerCliTasksDescriptionForFolder)
+    info['apiRoot'].folder.route('POST', (':id', 'item_task_slicer_cli_xml'),
+                                 createItemTasksFromSlicerCliXml)
+    info['apiRoot'].folder.route('POST', (':id', 'item_task_json_description'),
+                                 runJsonTasksDescriptionForFolder)
+    info['apiRoot'].folder.route('POST', (':id', 'item_task_json_specs'),
+                                 createItemTasksFromJson)

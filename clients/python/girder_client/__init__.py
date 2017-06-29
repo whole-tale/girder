@@ -30,7 +30,10 @@ import shutil
 import six
 import tempfile
 
-__version__ = '2.0.0'
+from contextlib import contextmanager
+from requests_toolbelt import MultipartEncoder
+
+__version__ = '2.2.1'
 __license__ = 'Apache 2.0'
 
 DEFAULT_PAGE_LIMIT = 50  # Number of results to fetch per request
@@ -88,6 +91,47 @@ class HttpError(Exception):
         return super(HttpError, self).__str__() + '\nResponse text: ' + self.responseText
 
 
+class _NoopProgressReporter(object):
+    reportProgress = False
+
+    def __init__(self, label='', length=0):
+        self.label = label
+        self.length = length
+
+    def update(self, chunkSize):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        pass
+
+
+# Used for fast non-multipart upload
+class _ProgressBytesIO(six.BytesIO):
+    def __init__(self, *args, **kwargs):
+        self.reporter = kwargs.pop('reporter')
+        six.BytesIO.__init__(self, *args, **kwargs)
+
+    def read(self, _size):
+        _chunk = six.BytesIO.read(self, _size)
+        self.reporter.update(len(_chunk))
+        return _chunk
+
+
+# Used for deprecated multipart upload
+class _ProgressMultiPartEncoder(MultipartEncoder):
+    def __init__(self, *args, **kwargs):
+        self.reporter = kwargs.pop('reporter')
+        MultipartEncoder.__init__(self, *args, **kwargs)
+
+    def read(self, _size):
+        _chunk = MultipartEncoder.read(self, _size)
+        self.reporter.update(len(_chunk))
+        return _chunk
+
+
 class GirderClient(object):
     """
     A class for interacting with the Girder RESTful API.
@@ -110,21 +154,40 @@ class GirderClient(object):
             {'q': 'aggregated','types': '["folder", "item"]'})
     """
 
-    # A convenience dictionary mapping HTTP method names to functions in the
-    # requests module
-    METHODS = {
-        'GET': requests.get,
-        'POST': requests.post,
-        'PUT': requests.put,
-        'DELETE': requests.delete,
-        'PATCH': requests.patch
-    }
-
     # The current maximum chunk size for uploading file chunks
     MAX_CHUNK_SIZE = 1024 * 1024 * 64
 
+    DEFAULT_API_ROOT = 'api/v1'
+    DEFAULT_HOST = 'localhost'
+    DEFAULT_LOCALHOST_PORT = 8080
+    DEFAULT_HTTP_PORT = 80
+    DEFAULT_HTTPS_PORT = 443
+
+    @staticmethod
+    def getDefaultPort(hostname, scheme):
+        """Get default port based on the hostname.
+        Returns `GirderClient.DEFAULT_HTTPS_PORT` if scheme is `https`, otherwise
+        returns `GirderClient.DEFAULT_LOCALHOST_PORT` if `hostname` is `localhost`,
+        and finally returns `GirderClient.DEFAULT_HTTP_PORT`.
+        """
+        if scheme == "https":
+            return GirderClient.DEFAULT_HTTPS_PORT
+        if hostname == "localhost":
+            return GirderClient.DEFAULT_LOCALHOST_PORT
+        return GirderClient.DEFAULT_HTTP_PORT
+
+    @staticmethod
+    def getDefaultScheme(hostname):
+        """Get default scheme based on the hostname.
+        Returns `http` if `hostname` is `localhost` otherwise returns `https`.
+        """
+        if hostname == "localhost":
+            return "http"
+        else:
+            return "https"
+
     def __init__(self, host=None, port=None, apiRoot=None, scheme=None, apiUrl=None,
-                 cacheSettings=None):
+                 cacheSettings=None, progressReporterCls=None):
         """
         Construct a new GirderClient object, given a host name and port number,
         as well as a username and password which will be used in all requests
@@ -146,14 +209,26 @@ class GirderClient(object):
             to pass 443 for the port
         :param cacheSettings: Settings to use with the diskcache library, or
             None to disable caching.
+        :param progressReporterCls: the progress reporter class to instantiate. This class
+            is expected to be a context manager with a constructor accepting `label` and
+            `length` keyword arguments, an `update` method accepting a `chunkSize` argument and
+            a class attribute `reportProgress` set to True (It can conveniently be
+            initialized using `sys.stdout.isatty()`).
+            This defaults to :class:`_NoopProgressReporter`.
         """
+        self.host = None
+        self.scheme = None
+        self.port = None
         if apiUrl is None:
-            if apiRoot is None:
-                apiRoot = '/api/v1'
+            if not apiRoot:
+                apiRoot = self.DEFAULT_API_ROOT
+            # If needed, prepend '/'
+            if not apiRoot.startswith('/'):
+                apiRoot = '/' + apiRoot
 
-            self.scheme = scheme or 'http'
-            self.host = host or 'localhost'
-            self.port = port or (443 if scheme == 'https' else 80)
+            self.host = host or self.DEFAULT_HOST
+            self.scheme = scheme or GirderClient.getDefaultScheme(self.host)
+            self.port = port or GirderClient.getDefaultPort(self.host, self.scheme)
 
             self.urlBase = '%s://%s:%s%s' % (
                 self.scheme, self.host, str(self.port), apiRoot)
@@ -166,6 +241,7 @@ class GirderClient(object):
         self.token = ''
         self._folderUploadCallbacks = []
         self._itemUploadCallbacks = []
+        self._serverApiDescription = {}
         self.incomingMetadata = {}
         self.localMetadata = {}
 
@@ -173,6 +249,44 @@ class GirderClient(object):
             self.cache = None
         else:
             self.cache = diskcache.Cache(**cacheSettings)
+
+        if progressReporterCls is None:
+            progressReporterCls = _NoopProgressReporter
+
+        self.progressReporterCls = progressReporterCls
+        self._session = None
+
+    @contextmanager
+    def session(self, session=None):
+        """
+        Use a :class:`requests.Session` object for all outgoing requests from
+        :class:`GirderClient`. If `session` isn't passed into the context manager
+        then one will be created and yielded. Session objects are useful for enabling
+        persistent HTTP connections as well as partially applying arguments to many
+        requests, such as headers.
+
+        Note: `session` is closed when the context manager exits, regardless of who
+        created it.
+
+        .. code-block:: python
+
+            with gc.session() as session:
+                session.headers.update({'User-Agent': 'myapp 1.0'})
+
+                for itemId in itemIds:
+                    gc.downloadItem(itemId, fh)
+
+        In the above example, each request will be executed with the User-Agent header
+        while reusing the same TCP connection.
+
+        :param session: An existing :class:`requests.Session` object, or None.
+        """
+        self._session = session if session else requests.Session()
+
+        yield self._session
+
+        self._session.close()
+        self._session = None
 
     def authenticate(self, username=None, password=None, interactive=False, apiKey=None):
         """
@@ -209,7 +323,7 @@ class GirderClient(object):
             resp = self.post('api_key/token', parameters={
                 'key': apiKey
             })
-            self.token = resp['authToken']['token']
+            self.setToken(resp['authToken']['token'])
         else:
             if interactive:
                 if username is None:
@@ -220,7 +334,7 @@ class GirderClient(object):
                 raise Exception('A user name and password are required')
 
             url = self.urlBase + 'user/authentication'
-            authResponse = requests.get(url, auth=(username, password))
+            authResponse = self._requestFunc('get')(url, auth=(username, password))
 
             if authResponse.status_code == 404:
                 raise HttpError(404, authResponse.text, url, 'GET')
@@ -229,9 +343,87 @@ class GirderClient(object):
             if 'authToken' not in resp:
                 raise AuthenticationError()
 
-            self.token = resp['authToken']['token']
+            self.setToken(resp['authToken']['token'])
 
-    def sendRestRequest(self, method, path, parameters=None, data=None, files=None, json=None):
+    def setToken(self, token):
+        """
+        Set a token on the GirderClient instance. This is useful in the case
+        where the client has already been given a valid token, such as a remote job.
+
+        :param token: A string containing the existing Girder token
+        """
+        self.token = token
+
+    def getServerVersion(self, useCached=True):
+        """
+        Fetch server API version. By default, caches the version
+        such that future calls to this function do not make another request to
+        the server.
+
+        :param useCached: Whether to return the previously fetched value. Set
+            to False to force a re-fetch of the version from the server.
+        :type useCached: bool
+        :return: The API version as a list (e.g. ``['1', '0', '0']``)
+        """
+        description = self.getServerAPIDescription(useCached)
+        version = description.get('info', {}).get('version')
+        return version.split('.') if version else None
+
+    def getServerAPIDescription(self, useCached=True):
+        """
+        Fetch server RESTful API description.
+
+        :param useCached: Whether to return the previously fetched value. Set
+            to False to force a re-fetch of the description from the server.
+        :type useCached: bool
+        :return: The API descriptions as a dict.
+
+        For example: ::
+
+            {
+                "basePath": "/api/v1",
+                "definitions": {},
+                "host": "girder.example.com",
+                "info": {
+                    "title": "Girder REST API",
+                    "version": "X.Y.Z"
+                },
+                "paths": {
+                    "/api_key": {
+                        "get": {
+                            "description": "Only site administrators [...]",
+                            "operationId": "api_key_listKeys",
+                            "parameters": [
+                                {
+                                    "description": "ID of the user whose keys to list.",
+                                    "in": "query",
+                                    "name": "userId",
+                                    "required": false,
+                                    "type": "string"
+                                },
+                                ...
+                            ]
+                        }.
+                        ...
+                    }
+                ...
+                }
+            }
+
+        """
+        if not self._serverApiDescription or not useCached:
+            self._serverApiDescription = self.get('describe')
+
+        return self._serverApiDescription
+
+    def _requestFunc(self, method):
+        if self._session is not None:
+            return getattr(self._session, method.lower())
+        else:
+            return getattr(requests, method.lower())
+
+    def sendRestRequest(self, method, path, parameters=None,
+                        data=None, files=None, json=None, headers=None, jsonResp=True):
         """
         This method looks up the appropriate method, constructs a request URL
         from the base URL, path, and parameters, and then sends the request. If
@@ -251,66 +443,86 @@ class GirderClient(object):
             as the key/value pairs in the request parameters.
         :type parameters: dict
         :param data: A dictionary, bytes or file-like object to send in the body.
-        :param files: A dictonary of 'name' => file-like-objects for multipart encoding upload.
+        :param files: A dictionary of 'name' => file-like-objects for multipart encoding upload.
         :type files: dict
         :param json: A JSON object to send in the request body.
         :type json: dict
+        :param headers: If present, a dictionary of headers to encode in the request.
+        :type headers: dict
+        :param jsonResp: Whether the response should be parsed as JSON. If False, the raw
+            response object is returned. To get the raw binary content of the response,
+            use the ``content`` attribute of the return value, e.g.
+
+            .. code-block:: python
+
+                resp = client.get('my/endpoint', jsonResp=False)
+                print(resp.content)  # Raw binary content
+                print(resp.headers)  # Dict of headers
+
+        :type jsonResp: bool
         """
         if not parameters:
             parameters = {}
 
         # Look up the HTTP method we need
-        f = self.METHODS[method]
+        f = self._requestFunc(method)
 
         # Construct the url
         url = self.urlBase + path
 
         # Make the request, passing parameters and authentication info
+        _headers = {'Girder-Token': self.token}
+        if isinstance(headers, dict):
+            _headers.update(headers)
+
         result = f(
-            url, params=parameters, data=data, files=files, json=json,
-            headers={'Girder-Token': self.token})
+            url, params=parameters, data=data, files=files, json=json, headers=_headers)
 
         # If success, return the json object. Otherwise throw an exception.
         if result.status_code in (200, 201):
-            return result.json()
+            if jsonResp:
+                return result.json()
+            else:
+                return result
         # TODO handle 300-level status (follow redirect?)
         else:
             raise HttpError(
                 status=result.status_code, url=result.url, method=method, text=result.text)
 
-    def get(self, path, parameters=None):
+    def get(self, path, parameters=None, jsonResp=True):
         """
         Convenience method to call :py:func:`sendRestRequest` with the 'GET' HTTP method.
         """
-        return self.sendRestRequest('GET', path, parameters)
+        return self.sendRestRequest('GET', path, parameters, jsonResp=jsonResp)
 
-    def post(self, path, parameters=None, files=None, data=None, json=None):
+    def post(self, path, parameters=None, files=None, data=None, json=None, headers=None,
+             jsonResp=True):
         """
         Convenience method to call :py:func:`sendRestRequest` with the 'POST' HTTP method.
         """
         return self.sendRestRequest('POST', path, parameters, files=files,
-                                    data=data, json=json)
+                                    data=data, json=json, headers=headers, jsonResp=jsonResp)
 
-    def put(self, path, parameters=None, data=None, json=None):
+    def put(self, path, parameters=None, data=None, json=None, jsonResp=True):
         """
         Convenience method to call :py:func:`sendRestRequest` with the 'PUT'
         HTTP method.
         """
         return self.sendRestRequest('PUT', path, parameters, data=data,
-                                    json=json)
+                                    json=json, jsonResp=jsonResp)
 
-    def delete(self, path, parameters=None):
+    def delete(self, path, parameters=None, jsonResp=True):
         """
         Convenience method to call :py:func:`sendRestRequest` with the 'DELETE' HTTP method.
         """
-        return self.sendRestRequest('DELETE', path, parameters)
+        return self.sendRestRequest('DELETE', path, parameters, jsonResp=jsonResp)
 
-    def patch(self, path, parameters=None, data=None, json=None):
+    def patch(self, path, parameters=None, data=None, json=None, jsonResp=True):
         """
         Convenience method to call :py:func:`sendRestRequest` with the 'PATCH' HTTP method.
         """
         return self.sendRestRequest('PATCH', path, parameters, data=data,
-                                    json=json)
+                                    json=json, jsonResp=jsonResp)
 
     def createResource(self, path, params):
         """
@@ -503,7 +715,8 @@ class GirderClient(object):
         }
         return self.createResource('collection', params)
 
-    def createFolder(self, parentId, name, description='', parentType='folder', public=None):
+    def createFolder(self, parentId, name, description='', parentType='folder',
+                     public=None, reuseExisting=False):
         """
         Creates and returns a folder.
 
@@ -513,7 +726,8 @@ class GirderClient(object):
             'parentId': parentId,
             'parentType': parentType,
             'name': name,
-            'description': description
+            'description': description,
+            'reuseExisting': reuseExisting
         }
         if public is not None:
             params['public'] = public
@@ -573,24 +787,6 @@ class GirderClient(object):
         }
         return self.put(path, params)
 
-    def _fileChunker(self, filepath, filesize=None):
-        """
-        Generator returning chunks of a file in MAX_CHUNK_SIZE increments.
-
-        :param filepath: path to file on disk.
-        :param filesize: size of file on disk if known.
-        """
-        if filesize is None:
-            filesize = os.path.getsize(filepath)
-        startbyte = 0
-        nextChunkSize = min(self.MAX_CHUNK_SIZE, filesize - startbyte)
-        with open(filepath, 'rb') as fd:
-            while nextChunkSize > 0:
-                chunk = fd.read(nextChunkSize)
-                yield (chunk, startbyte)
-                startbyte = startbyte + nextChunkSize
-                nextChunkSize = min(self.MAX_CHUNK_SIZE, filesize - startbyte)
-
     def isFileCurrent(self, itemId, filename, filepath):
         """
         Tests whether the passed in filepath exists in the item with itemId,
@@ -615,7 +811,8 @@ class GirderClient(object):
         # to upload anyway in this case also.
         return (None, False)
 
-    def uploadFileToItem(self, itemId, filepath, reference=None, mimeType=None, filename=None):
+    def uploadFileToItem(self, itemId, filepath, reference=None, mimeType=None, filename=None,
+                         progressCallback=None):
         """
         Uploads a file to an item, in chunks.
         If ((the file already exists in the item with the same name and size)
@@ -628,6 +825,10 @@ class GirderClient(object):
         :param mimeType: MIME type for the file. Will be guessed if not passed.
         :type mimeType: str or None
         :param filename: path with filename used in Girder. Defaults to basename of filepath.
+        :param progressCallback: If passed, will be called after each chunk
+            with progress information. It passes a single positional argument
+            to the callable which is a dict of information about progress.
+        :type progressCallback: callable
         :returns: the file that was created.
         """
         if filename is None:
@@ -654,9 +855,7 @@ class GirderClient(object):
             if reference:
                 params['reference'] = reference
             obj = self.put(path, params)
-            if '_id' in obj:
-                uploadId = obj['_id']
-            else:
+            if '_id' not in obj:
                 raise Exception(
                     'After creating an upload token for replacing file '
                     'contents, expected an object with an id. Got instead: ' +
@@ -676,29 +875,64 @@ class GirderClient(object):
             if reference:
                 params['reference'] = reference
             obj = self.post('file', params)
-            if '_id' in obj:
-                uploadId = obj['_id']
-            else:
+            if '_id' not in obj:
                 raise Exception(
                     'After creating an upload token for a new file, expected '
                     'an object with an id. Got instead: ' + json.dumps(obj))
 
-        for chunk, startbyte in self._fileChunker(filepath, filesize):
-            parameters = {
-                'offset': startbyte,
-                'uploadId': uploadId
-            }
-            filedata = {
-                'chunk': chunk
-            }
-            path = 'file/chunk'
-            obj = self.post(path, parameters=parameters, files=filedata)
+        with open(filepath, 'rb') as f:
+            return self._uploadContents(obj, f, filesize, progressCallback=progressCallback)
 
-            if '_id' not in obj:
-                raise Exception(
-                    'After uploading a file chunk, did not receive object with _id. Got instead: ' +
-                    json.dumps(obj))
-        return obj
+    def uploadFileToFolder(self, folderId, filepath, reference=None, mimeType=None, filename=None,
+                           progressCallback=None):
+        """
+        Uploads a file to a folder, creating a new item in the process.  If
+        the file has 0 bytes, no uploading will be performed, and no item will
+        be created.
+
+        :param folderId: ID of parent folder for file.
+        :param filepath: path to file on disk.
+        :param reference: optional reference to send along with the upload.
+        :type reference: str
+        :param mimeType: MIME type for the file. Will be guessed if not passed.
+        :type mimeType: str or None
+        :param filename: path with filename used in Girder. Defaults to basename of filepath.
+        :param progressCallback: If passed, will be called after each chunk
+            with progress information. It passes a single positional argument
+            to the callable which is a dict of information about progress.
+        :type progressCallback: callable
+        :returns: the file that was created.
+        """
+        if filename is None:
+            filename = filepath
+        filename = os.path.basename(filename)
+        filepath = os.path.abspath(filepath)
+        filesize = os.path.getsize(filepath)
+
+        if filesize == 0:
+            return
+
+        if mimeType is None:
+            # Attempt to guess MIME type if not passed explicitly
+            mimeType, _ = mimetypes.guess_type(filepath)
+
+        params = {
+            'parentType': 'folder',
+            'parentId': folderId,
+            'name': filename,
+            'size': filesize,
+            'mimeType': mimeType
+        }
+        if reference:
+            params['reference'] = reference
+        obj = self.post('file', params)
+        if '_id' not in obj:
+            raise Exception(
+                'After creating an upload token for a new file, expected '
+                'an object with an id. Got instead: ' + json.dumps(obj))
+
+        with open(filepath, 'rb') as f:
+            return self._uploadContents(obj, f, filesize, progressCallback=progressCallback)
 
     def _uploadContents(self, uploadObj, stream, size, progressCallback=None):
         """
@@ -719,32 +953,49 @@ class GirderClient(object):
         """
         offset = 0
         uploadId = uploadObj['_id']
-        while True:
-            data = stream.read(min(self.MAX_CHUNK_SIZE, (size - offset)))
 
-            if not data:
-                break
+        with self.progressReporterCls(label=uploadObj.get('name', ''), length=size) as reporter:
 
-            params = {
-                'offset': offset,
-                'uploadId': uploadId
-            }
-            files = {
-                'chunk': data
-            }
-            uploadObj = self.post('file/chunk', parameters=params, files=files)
-            offset += len(data)
+            while True:
+                chunk = stream.read(min(self.MAX_CHUNK_SIZE, (size - offset)))
 
-            if '_id' not in uploadObj:
-                raise Exception(
-                    'After uploading a file chunk, did not receive object with _id. Got instead: ' +
-                    json.dumps(uploadObj))
+                if not chunk:
+                    break
 
-            if callable(progressCallback):
-                progressCallback({
-                    'current': offset,
-                    'total': size
-                })
+                if isinstance(chunk, six.text_type):
+                    chunk = chunk.encode('utf8')
+
+                if self.getServerVersion() >= ['2', '2']:
+                    uploadObj = self.post(
+                        'file/chunk?offset=%d&uploadId=%s' % (offset, uploadId),
+                        data=_ProgressBytesIO(chunk, reporter=reporter))
+                else:
+                    # Prior to version 2.2 the server only supported multipart uploads
+                    parameters = {
+                        'offset': offset,
+                        'uploadId': uploadId
+                    }
+
+                    m = _ProgressMultiPartEncoder(
+                        reporter=reporter,
+                        fields={'chunk': ('chunk', chunk, 'application/octet-stream')},
+                    )
+
+                    uploadObj = self.post('file/chunk', parameters=parameters,
+                                          data=m, headers={'Content-Type': m.content_type})
+
+                if '_id' not in uploadObj:
+                    raise Exception(
+                        'After uploading a file chunk, did not receive object with _id. '
+                        'Got instead: ' + json.dumps(uploadObj))
+
+                offset += len(chunk)
+
+                if callable(progressCallback):
+                    progressCallback({
+                        'current': offset,
+                        'total': size
+                    })
 
         if offset != size:
             self.delete('file/upload/' + uploadId)
@@ -842,7 +1093,7 @@ class GirderClient(object):
 
     def addMetadataToFolder(self, folderId, metadata):
         """
-        Takes an folder ID and a dictionary containing the metadata
+        Takes a folder ID and a dictionary containing the metadata
 
         :param folderId: ID of the folder to set metadata on.
         :param metadata: dictionary of metadata to set on folder.
@@ -898,12 +1149,21 @@ class GirderClient(object):
                 return
 
         # download to a tempfile
-        req = requests.get(
-            '%sfile/%s/download' % (self.urlBase, fileId),
-            stream=True, headers={'Girder-Token': self.token})
+        progressFileName = fileId
+        if isinstance(path, six.string_types):
+            progressFileName = os.path.basename(path)
+
+        url = '%sfile/%s/download' % (self.urlBase, fileId)
+        req = self._requestFunc('get')(url, stream=True, headers={'Girder-Token': self.token})
+        if not req.ok:
+            raise HttpError(req.status_code, req.text, url, 'GET')
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            for chunk in req.iter_content(chunk_size=REQ_BUFFER_SIZE):
-                tmp.write(chunk)
+            with self.progressReporterCls(
+                    label=progressFileName,
+                    length=int(req.headers.get('content-length', 0))) as reporter:
+                for chunk in req.iter_content(chunk_size=REQ_BUFFER_SIZE):
+                    reporter.update(len(chunk))
+                    tmp.write(chunk)
 
         # save file in cache
         if self.cache is not None:
@@ -1196,33 +1456,37 @@ class GirderClient(object):
 
         return item
 
-    def _uploadFileToItem(self, localFile, parentItemId, filePath):
-        """Helper function to upload a file to an item
-        :param localFile: name of local file to upload
-        :param parentItemId: id of parent item in Girder to add file to
-        :param filePath: full path to the file
-        """
-        self.uploadFileToItem(parentItemId, filePath, filename=localFile)
-
-    def _uploadAsItem(self, localFile, parentFolderId, filePath, reuseExisting=False, dryRun=False):
+    def _uploadAsItem(self, localFile, parentFolderId, filePath, reuseExisting=False, dryRun=False,
+                      reference=None):
         """Function for doing an upload of a file as an item.
         :param localFile: name of local file to upload
         :param parentFolderId: id of parent folder in Girder
         :param filePath: full path to the file
         :param reuseExisting: boolean indicating whether to accept an existing item
             of the same name in the same location, or create a new one instead
+        :param reference: Option reference to send along with the upload.
         """
-        print('Uploading Item from %s' % localFile)
+        if not self.progressReporterCls.reportProgress:
+            print('Uploading Item from %s' % localFile)
         if not dryRun:
-            currentItem = self.loadOrCreateItem(
-                os.path.basename(localFile), parentFolderId, reuseExisting)
-            self._uploadFileToItem(localFile, currentItem['_id'], filePath)
-
-            for callback in self._itemUploadCallbacks:
-                callback(currentItem, filePath)
+            # If we are reusing existing items or have upload callbacks, then
+            # we need to know the item as part of the process.  If this is a
+            # zero-length file, we create an item.  Otherwise, we can just
+            # upload to the parent folder and never learn about the created
+            # item.
+            if reuseExisting or len(self._itemUploadCallbacks) or os.path.getsize(filePath) == 0:
+                currentItem = self.loadOrCreateItem(
+                    os.path.basename(localFile), parentFolderId, reuseExisting)
+                self.uploadFileToItem(
+                    currentItem['_id'], filePath, filename=localFile, reference=reference)
+                for callback in self._itemUploadCallbacks:
+                    callback(currentItem, filePath)
+            else:
+                self.uploadFileToFolder(
+                    parentFolderId, filePath, filename=localFile, reference=reference)
 
     def _uploadFolderAsItem(self, localFolder, parentFolderId, reuseExisting=False, blacklist=None,
-                            dryRun=False):
+                            dryRun=False, reference=None):
         """
         Take a folder and use its base name as the name of a new item. Then,
         upload its containing files into the new item as bitstreams.
@@ -1231,6 +1495,7 @@ class GirderClient(object):
         :param parentFolderId: Id of the destination folder for the new item.
         :param reuseExisting: boolean indicating whether to accept an existing item
             of the same name in the same location, or create a new one instead
+        :param reference: Option reference to send along with the upload.
         """
         blacklist = blacklist or []
         print('Creating Item from folder %s' % localFolder)
@@ -1250,14 +1515,14 @@ class GirderClient(object):
             print('Adding file %s, (%d of %d) to Item' % (currentFile, ind + 1, filecount))
 
             if not dryRun:
-                self._uploadFileToItem(currentFile, item['_id'], filepath)
+                self.uploadFileToItem(item['_id'], filepath, filename=currentFile)
 
         if not dryRun:
             for callback in self._itemUploadCallbacks:
                 callback(item, localFolder)
 
     def _uploadFolderRecursive(self, localFolder, parentId, parentType, leafFoldersAsItems=False,
-                               reuseExisting=False, blacklist=None, dryRun=False):
+                               reuseExisting=False, blacklist=None, dryRun=False, reference=None):
         """
         Function to recursively upload a folder and all of its descendants.
 
@@ -1268,6 +1533,7 @@ class GirderClient(object):
             files uploaded as single items
         :param reuseExisting: boolean indicating whether to accept an existing item
             of the same name in the same location, or create a new one instead
+        :param reference: Option reference to send along with the upload.
         """
         blacklist = blacklist or []
         if leafFoldersAsItems and self._hasOnlyFiles(localFolder):
@@ -1307,17 +1573,18 @@ class GirderClient(object):
                     # pass that as the parent_type
                     self._uploadFolderRecursive(
                         fullEntry, folder['_id'], 'folder', leafFoldersAsItems, reuseExisting,
-                        dryRun=dryRun)
+                        dryRun=dryRun, reference=reference)
                 else:
                     self._uploadAsItem(
-                        entry, folder['_id'], fullEntry, reuseExisting, dryRun=dryRun)
+                        entry, folder['_id'], fullEntry, reuseExisting, dryRun=dryRun,
+                        reference=reference)
 
             if not dryRun:
                 for callback in self._folderUploadCallbacks:
                     callback(folder, localFolder)
 
     def upload(self, filePattern, parentId, parentType='folder', leafFoldersAsItems=False,
-               reuseExisting=False, blacklist=None, dryRun=False):
+               reuseExisting=False, blacklist=None, dryRun=False, reference=None):
         """
         Upload a pattern of files.
 
@@ -1325,7 +1592,8 @@ class GirderClient(object):
         create a hierarchy on the server under the parentId.
 
         :param filePattern: a glob pattern for files that will be uploaded,
-            recursively copying any file folder structures.
+            recursively copying any file folder structures.  If this is a list
+            or tuple each item in it will be used in turn.
         :type filePattern: str
         :param parentId: Id of the parent in Girder or resource path.
         :type parentId: ObjectId or Unix-style path to the resource in Girder.
@@ -1340,33 +1608,37 @@ class GirderClient(object):
         :param dryRun: Set this to True to print out what actions would be taken, but
             do not actually communicate with the server.
         :type dryRun: bool
+        :param reference: Option reference to send along with the upload.
+        :type reference: str
         """
+        filePatternList = filePattern if isinstance(filePattern, (list, tuple)) else [filePattern]
         blacklist = blacklist or []
         empty = True
         parentId = self._checkResourcePath(parentId)
-        for currentFile in glob.iglob(filePattern):
-            empty = False
-            currentFile = os.path.normpath(currentFile)
-            filename = os.path.basename(currentFile)
-            if filename in blacklist:
-                if dryRun:
-                    print('Ignoring file %s as it is blacklisted' % filename)
-                continue
-            if os.path.isfile(currentFile):
-                if parentType != 'folder':
-                    raise Exception(
-                        'Attempting to upload an item under a %s. Items can only be added to '
-                        'folders.' % parentType)
+        for pattern in filePatternList:
+            for currentFile in glob.iglob(pattern):
+                empty = False
+                currentFile = os.path.normpath(currentFile)
+                filename = os.path.basename(currentFile)
+                if filename in blacklist:
+                    if dryRun:
+                        print('Ignoring file %s as it is blacklisted' % filename)
+                    continue
+                if os.path.isfile(currentFile):
+                    if parentType != 'folder':
+                        raise Exception(
+                            'Attempting to upload an item under a %s. Items can only be added to '
+                            'folders.' % parentType)
+                    else:
+                        self._uploadAsItem(
+                            os.path.basename(currentFile), parentId, currentFile, reuseExisting,
+                            dryRun=dryRun, reference=reference)
                 else:
-                    self._uploadAsItem(
-                        os.path.basename(currentFile), parentId, currentFile, reuseExisting,
-                        dryRun=dryRun)
-            else:
-                self._uploadFolderRecursive(
-                    currentFile, parentId, parentType, leafFoldersAsItems, reuseExisting,
-                    blacklist=blacklist, dryRun=dryRun)
+                    self._uploadFolderRecursive(
+                        currentFile, parentId, parentType, leafFoldersAsItems, reuseExisting,
+                        blacklist=blacklist, dryRun=dryRun, reference=reference)
         if empty:
-            print('No matching files: ' + filePattern)
+            print('No matching files: ' + repr(filePattern))
 
     def _checkResourcePath(self, objId):
         if isinstance(objId, six.string_types) and objId.startswith('/'):

@@ -477,6 +477,12 @@ def _createResponse(val):
     thread, this will simply return the response raw.
     """
     if getattr(cherrypy.request, 'girderRawResponse', False) is True:
+        if isinstance(val, six.text_type):
+            # If we were given a non-encoded text response, we have
+            # to encode it, so we use UTF-8.
+            ctype = cherrypy.response.headers['Content-Type'].split(';', 1)
+            setResponseHeader('Content-Type', ctype[0] + ';charset=utf-8')
+            return val.encode('utf8')
         return val
 
     accepts = cherrypy.request.headers.elements('Accept')
@@ -1064,13 +1070,18 @@ class Resource(ModelImporter):
         """
         Helper method to send the authentication cookie
         """
-        days = float(self.model('setting').get(SettingKey.COOKIE_LIFETIME))
+        setting = self.model('setting')
+        days = float(setting.get(SettingKey.COOKIE_LIFETIME))
+        secure = setting.get(SettingKey.SECURE_COOKIE)
         token = self.model('token').createToken(user, days=days, scope=scope)
 
         cookie = cherrypy.response.cookie
         cookie['girderToken'] = str(token['_id'])
         cookie['girderToken']['path'] = '/'
         cookie['girderToken']['expires'] = int(days * 3600 * 24)
+
+        if secure:
+            cookie['girderToken']['secure'] = True
 
         return token
 

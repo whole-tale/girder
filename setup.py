@@ -62,7 +62,8 @@ with open('README.rst') as f:
 install_reqs = [
     'bcrypt',
     'boto',
-    'CherryPy<8',  # see https://github.com/girder/girder/issues/1615
+    'CherryPy',
+    'filelock',
     'jsonschema',
     'Mako',
     'pymongo>=3',
@@ -79,8 +80,9 @@ extras_reqs = {
     'dicom_viewer': ['pydicom'],
     'geospatial': ['geojson'],
     'item_tasks': ['ctk-cli'],
+    'ldap': ['pyldap'],
     'thumbnails': ['Pillow', 'pydicom', 'numpy'],
-    'worker': ['celery']
+    'worker': ['celery>=4.0.0']
 }
 all_extra_reqs = itertools.chain.from_iterable(extras_reqs.values())
 extras_reqs['plugins'] = list(set(all_extra_reqs))

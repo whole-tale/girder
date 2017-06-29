@@ -21,18 +21,23 @@ from girder.api import access
 from girder.api.describe import Description, autoDescribeRoute
 from girder.api.rest import Resource, filtermodel
 from girder.constants import AccessType, SortDir
+from . import constants
 
 
 class Job(Resource):
+
     def __init__(self):
         super(Job, self).__init__()
         self.resourceName = 'job'
 
         self.route('GET', (), self.listJobs)
+        self.route('POST', (), self.createJob)
         self.route('GET', ('all',), self.listAllJobs)
         self.route('GET', (':id',), self.getJob)
         self.route('PUT', (':id',), self.updateJob)
         self.route('DELETE', (':id',), self.deleteJob)
+        self.route('GET', ('typeandstatus', 'all',), self.allJobsTypesAndStatuses)
+        self.route('GET', ('typeandstatus',), self.jobsTypesAndStatuses)
 
     @access.public
     @filtermodel(model='job', plugin='jobs')
@@ -42,30 +47,76 @@ class Job(Resource):
                'not passed or empty, will use the currently logged in user. If '
                'set to "None", will list all jobs that do not have an owning '
                'user.', required=False)
+        .modelParam('parentId', 'Id of the parent job.', model='job',
+                    plugin='jobs', level=AccessType.ADMIN,
+                    destName='parentJob', paramType='query', required=False)
+        .jsonParam('types', 'Filter for type', requireArray=True, required=False)
+        .jsonParam('statuses', 'Filter for status', requireArray=True, required=False)
         .pagingParams(defaultSort='created', defaultSortDir=SortDir.DESCENDING)
     )
-    def listJobs(self, userId, limit, offset, sort, params):
+    def listJobs(self, userId, parentJob, types, statuses, limit, offset, sort,
+                 params):
         currentUser = self.getCurrentUser()
         if not userId:
             user = currentUser
         elif userId.lower() == 'none':
-            user = None
+            user = 'none'
         else:
-            user = self.model('user').load(userId, user=currentUser, level=AccessType.READ)
+            user = self.model('user').load(
+                userId, user=currentUser, level=AccessType.READ)
+
+        parent = None
+        if parentJob:
+            parent = parentJob
 
         return list(self.model('job', 'jobs').list(
-            user=user, offset=offset, limit=limit, sort=sort, currentUser=currentUser))
+            user=user, offset=offset, limit=limit, types=types,
+            statuses=statuses, sort=sort, currentUser=currentUser,
+            parentJob=parent))
+
+    @filtermodel(model='job', plugin='jobs')
+    @access.token(scope=constants.REST_CREATE_JOB_TOKEN_SCOPE, required=True)
+    @autoDescribeRoute(
+        Description('Create a job model')
+        .param('title', '', required=True)
+        .param('type', '', required=True)
+        .modelParam('parentId', 'ID of the parent job.', model='job',
+                    plugin='jobs', level=AccessType.ADMIN,
+                    destName='parentJob', paramType='query', required=False)
+        .param('public', '', required=False, dataType='boolean', default=False)
+        .param('handler', '', required=False, dataType='string')
+        .jsonParam('args', 'Job arguments', required=False, requireArray=True)
+        .jsonParam('kwargs', 'Job keyword arguments', required=False,
+                   requireObject=True)
+        .jsonParam('otherFields', 'Other fields specific to the job handler',
+                   requireObject=True, required=False)
+    )
+    def createJob(self, title, type, parentJob, public, handler, args, kwargs,
+                  otherFields, params):
+        return self.model('job', 'jobs').createJob(
+            title=title,
+            type=type,
+            public=public,
+            handler=handler,
+            user=self.getCurrentUser(),
+            args=args,
+            kwargs=kwargs,
+            parentJob=parentJob,
+            otherFields=otherFields)
 
     @access.admin
     @filtermodel(model='job', plugin='jobs')
     @autoDescribeRoute(
         Description('List all jobs.')
+        .jsonParam('types', 'Filter for type', requireArray=True, required=False)
+        .jsonParam('statuses', 'Filter for status', requireArray=True, required=False)
         .pagingParams(defaultSort='created', defaultSortDir=SortDir.DESCENDING)
     )
-    def listAllJobs(self, limit, offset, sort, params):
+    def listAllJobs(self, types, statuses, limit, offset, sort, params):
         currentUser = self.getCurrentUser()
-        return list(self.model('job', 'jobs').listAll(
-            offset=offset, limit=limit, sort=sort, currentUser=currentUser))
+        return list(self.model('job', 'jobs').list(
+            user='all', offset=offset, limit=limit, types=types,
+            statuses=statuses, sort=sort, currentUser=currentUser))
 
     @access.public
     @filtermodel(model='job', plugin='jobs')
@@ -112,7 +163,8 @@ class Job(Resource):
                   progressMessage, params):
         user = self.getCurrentUser()
         if user:
-            self.model('job', 'jobs').requireAccess(job, user, level=AccessType.WRITE)
+            self.model('job', 'jobs').requireAccess(
+                job, user, level=AccessType.WRITE)
         else:
             self.ensureTokenScopes('jobs.job_' + str(job['_id']))
 
@@ -130,3 +182,19 @@ class Job(Resource):
     )
     def deleteJob(self, job, params):
         self.model('job', 'jobs').remove(job)
+
+    @access.admin
+    @autoDescribeRoute(
+        Description('Get types and statuses of all jobs')
+        .errorResponse('Admin access was denied for the job.', 403)
+    )
+    def allJobsTypesAndStatuses(self, params):
+        return self.model('job', 'jobs').getAllTypesAndStatuses(user='all')
+
+    @access.user
+    @autoDescribeRoute(
+        Description('Get types and statuses of jobs of current user')
+    )
+    def jobsTypesAndStatuses(self, params):
+        currentUser = self.getCurrentUser()
+        return self.model('job', 'jobs').getAllTypesAndStatuses(user=currentUser)
