@@ -1,3 +1,4 @@
+girderTest.startApp();
 
 function canary() {
     var isDone = false;
@@ -16,11 +17,6 @@ function canary() {
 var failIfError = function (error) { expect(error).toBeUndefined(); };
 
 var reFiltered = /filterTest(\d+)/;
-
-/**
- * Start the girder backbone app.
- */
-girderTest.startApp();
 
 describe('Pre-test setup', function () {
     it('register a user (first is admin)',
@@ -59,11 +55,35 @@ describe('Test normal collection operation', function () {
             return collection.fetch();
         });
 
-        $.when(createPromise, fetchPromise).then(function () {
+        $.when(createPromise, fetchPromise).done(function () {
             expect(collection.length).toBe(10);
         }).fail(failIfError).always(done);
 
         waitsFor(done.check, 'to be done');
+    });
+
+    it('ensure collection fetch fires backbone "reset" event with expected options', function () {
+        var done = canary();
+        var collection = new girder.collections.ApiKeyCollection();
+        var previousModels = null;
+
+        // Within a "reset" event, Backbone provides the list of previous models
+        // as options.previousModels.
+        collection.once('reset', function (collection, options) {
+            previousModels = options.previousModels;
+        });
+
+        collection.fetch()
+            .fail(failIfError)
+            .always(done);
+
+        waitsFor(done.check, 'to be done');
+
+        runs(function () {
+            expect(collection.length).toBe(10);
+            expect(Array.isArray(previousModels)).toBe(true);
+            expect(previousModels.length).toBe(0);
+        });
     });
 
     it('ensure collections can go backwards and forwards', function () {
@@ -73,7 +93,7 @@ describe('Test normal collection operation', function () {
         collection.pageLimit = 2;
         collection.append = false;
 
-        $.when(collection.fetchNextPage()).then(function () {
+        collection.fetchNextPage().then(function () {
             expect(collection.length).toBe(2);
             expect(collection.at(0).get('name')).toBe('test0');
             expect(collection.at(1).get('name')).toBe('test1');
@@ -153,7 +173,7 @@ describe('Test normal collection operation', function () {
             expect(collection.pageNum()).toBe(1);
 
             return collection.fetchPreviousPage();
-        }).then(function () {
+        }).done(function () {
             expect(collection.length).toBe(2);
             expect(collection.at(0).get('name')).toBe('test0');
             expect(collection.at(1).get('name')).toBe('test1');
@@ -198,7 +218,7 @@ describe('Test collection filtering', function () {
             return filteredCollection.fetch();
         });
 
-        $.when(createPromise, fetchPromise).then(function () {
+        $.when(createPromise, fetchPromise).done(function () {
             expect(filteredCollection.length).toBe(10);
         }).fail(failIfError).always(done);
 
@@ -216,7 +236,7 @@ describe('Test collection filtering', function () {
             return match;
         };
 
-        $.when(collection.fetch()).then(function () {
+        collection.fetch().done(function () {
             expect(collection.length).toBe(5);
         }).fail(failIfError).always(done);
 
@@ -248,7 +268,7 @@ describe('Test collection filtering', function () {
          *     had not yet been included
          */
         collection.pageLimit = 5;
-        $.when(collection.fetch()).then(function () {
+        collection.fetch().done(function () {
             expect(collection.length).toBe(5);
             expect(collection.at(0).get('name')).toBe('filterTest0');
             expect(collection.at(1).get('name')).toBe('filterTest1');
@@ -278,7 +298,7 @@ describe('Test collection filtering', function () {
         collection.pageLimit = 2;
         collection.append = false;
 
-        $.when(collection.fetchNextPage()).then(function () {
+        collection.fetchNextPage().then(function () {
             expect(collection.length).toBe(2);
             expect(collection.at(0).get('name')).toBe('filterTest0');
             expect(collection.at(1).get('name')).toBe('filterTest1');
@@ -319,7 +339,7 @@ describe('Test collection filtering', function () {
             expect(collection.pageNum()).toBe(1);
 
             return collection.fetchPreviousPage();
-        }).then(function () {
+        }).done(function () {
             expect(collection.length).toBe(2);
             expect(collection.at(0).get('name')).toBe('filterTest0');
             expect(collection.at(1).get('name')).toBe('filterTest1');

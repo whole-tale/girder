@@ -1,6 +1,3 @@
-/**
- * Start the girder backbone app.
- */
 girderTest.startApp();
 
 describe('Create an admin and non-admin user', function () {
@@ -80,7 +77,7 @@ describe('Test the settings page', function () {
         expect($('#g-core-email-from-address').val()).toBe('');
         expect($('#g-core-registration-policy').val()).toBe('open');
         expect($('#g-core-upload-minimum-chunk-size').val()).toBe('');
-        expect($.parseJSON($('#g-core-collection-create-policy').val())).toEqual({
+        expect(JSON.parse($('#g-core-collection-create-policy').val())).toEqual({
             open: false,
             users: [],
             groups: []
@@ -214,7 +211,11 @@ describe('Test the assetstore page', function () {
                     if (value === 'service') {
                         value = service;
                     }
-                    $('input#' + key).val(value);
+                    if ($('input#' + key).is(':checkbox')) {
+                        $('input#' + key).attr('checked', value);
+                    } else {
+                        $('input#' + key).val(value);
+                    }
                 }
             });
             waitsFor(function () {
@@ -301,7 +302,7 @@ describe('Test the assetstore page', function () {
 
             if (callback) {
                 runs(function () {
-                    callback({
+                    callback({  // eslint-disable-line standard/no-callback-literal
                         name: name
                     });
                 });
@@ -539,21 +540,24 @@ describe('Test the assetstore page', function () {
         'g-new-fs-root': '/tmp/assetstore'
     }, _testFilesystemImport);
 
-    _testAssetstore('gridfs', 'g-create-gridfs-tab',
-        {'g-new-gridfs-name': 'name',
-            'g-new-gridfs-db': 'girder_webclient_gridfs'});
+    _testAssetstore('gridfs', 'g-create-gridfs-tab', {
+        'g-new-gridfs-name': 'name',
+        'g-new-gridfs-db': 'girder_webclient_gridfs'
+    });
 
     /* The specified assetstore should NOT exist, and the specified mongohost
      * should NOT be present (nothing should respond on those ports). */
-    _testAssetstore('gridfs-rs', 'g-create-gridfs-tab',
-        {'g-new-gridfs-name': 'name',
-            'g-new-gridfs-db': 'girder_webclient_gridfsrs',
-            'g-new-gridfs-mongohost': 'mongodb://127.0.0.2:27080,' +
-                        '127.0.0.2:27081,127.0.0.2:27082',
-            'g-new-gridfs-replicaset': 'replicaset'}, null, function () {
-                return $('.g-validation-failed-message:contains(' +
-                              '"Could not connect to the database: ")').length === 1;
-            }, 'validation failure to display', true);
+    _testAssetstore('gridfs-rs', 'g-create-gridfs-tab', {
+        'g-new-gridfs-name': 'name',
+        'g-new-gridfs-db': 'girder_webclient_gridfsrs',
+        'g-new-gridfs-mongohost': 'mongodb://127.0.0.2:27080,127.0.0.2:27081,' +
+                                  '127.0.0.2:27082/?serverSelectionTimeoutMS=250',
+        'g-new-gridfs-replicaset': 'replicaset',
+        'g-new-gridfs-shard-auto': false
+    }, null, function () {
+        return $('.g-validation-failed-message:contains(' +
+                 '"Could not connect to the database: ")').length === 1;
+    }, 'validation failure to display', true);
 
     _testAssetstore('s3', 'g-create-s3-tab', {
         'g-new-s3-name': 'name',
@@ -576,15 +580,18 @@ describe('Test the assetstore page', function () {
 describe('Test the plugins page', function () {
     beforeEach(function () {
         spyOn(girder.server.restartServer, '_callSystemRestart').andCallFake(function () {
+            var restartResolution = $.Deferred();
             window.setTimeout(function () {
                 girder.server.restartServer._lastStartDate = 0;
+                restartResolution.resolve();
             }, 100);
-        });
-        // We don't want to really rebuild the web code, so replace the original one with a resolved Promise
-        spyOn(girder.server.restartServer, '_rebuildWebClient').andCallFake(function () {
-            return Promise.resolve();
+            return restartResolution.promise();
         });
         spyOn(girder.server.restartServer, '_reloadWindow');
+        // We don't want to really rebuild the web code, so replace the original one with a resolved Promise
+        spyOn(girder.server.rebuildWebClient, '_rebuildWebClient').andCallFake(function () {
+            return $.Deferred().resolve().promise();
+        });
     });
 
     it('Test that anonymous loading plugins page prompts login', function () {
@@ -610,6 +617,17 @@ describe('Test the plugins page', function () {
         }, 'plugins page to load');
         girderTest.waitForLoad();
     });
+    it('Check that an error indicator is displayed for an enabled plugin that failed to load', function () {
+        var target = $('.g-plugin-list-item:contains(bad_server)');
+        expect(target.length).toBe(1);
+        expect(target.find('input[type=checkbox]:checked').length).toBe(1);
+        expect(target.hasClass('g-plugin-list-item-failed')).toBe(true);
+        expect(target.find('.g-plugin-list-item-failed-notice').length).toBe(1);
+
+        var content = target.find('.g-plugin-list-item-failed-notice').data('content');
+        expect(content).toContain('Traceback');
+        expect(content).toContain('Exception: Bad server');
+    });
     it('Enable a plugin with non-existent dependencies', function () {
         runs(function () {
             var target = $('.g-plugin-list-item:contains(has_nonexistent_deps)');
@@ -626,7 +644,7 @@ describe('Test the plugins page', function () {
         runs(function () {
             expect($('.g-plugin-list-item .bootstrap-switch').length > 0).toBe(true);
             expect($('.g-plugin-rebuild-restart-text').css('visibility')).toBe('hidden');
-            expect($('.g-plugin-list-item input[type=checkbox]:checked').length).toBe(0);
+            expect($('.g-plugin-list-item input[type=checkbox]:checked').length).toBe(1);
             $('.g-plugin-list-item:contains(test_plugin) .g-plugin-switch').click();
         });
         waitsFor(function () {
@@ -634,7 +652,7 @@ describe('Test the plugins page', function () {
                 $('.g-rebuild-and-restart').hasClass('btn-danger');
         }, 'rebuild and restart change color and restart messsage to be shown');
         runs(function () {
-            expect($('.g-plugin-list-item input[type=checkbox]:checked').length).toBe(1);
+            expect($('.g-plugin-list-item input[type=checkbox]:checked').length).toBe(2);
             $('.g-rebuild-and-restart').click();
         });
         waitsFor(function () {
@@ -671,7 +689,7 @@ describe('Test the plugins page', function () {
             $('.g-plugin-list-item:contains(test_plugin) .g-plugin-switch').click();
         });
         runs(function () {
-            expect($('.g-plugin-list-item input[type=checkbox]:checked').length).toBe(0);
+            expect($('.g-plugin-list-item input[type=checkbox]:checked').length).toBe(1);
         });
         waitsFor(function () {
             var resp = girder.rest.restRequest({
@@ -680,7 +698,7 @@ describe('Test the plugins page', function () {
                 async: false
             });
             return (resp && resp.responseJSON && resp.responseJSON.enabled &&
-                resp.responseJSON.enabled.length === 0);
+                resp.responseJSON.enabled.length === 1);
         });
     });
     /* Logout to make sure we don't see the plugins any more */

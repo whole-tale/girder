@@ -238,6 +238,7 @@ class ApiDescribeTestCase(base.TestCase):
                 self.route('GET', ('model_param_flags',), self.hasModelParamFlags)
                 self.route('GET', ('model_param_query',), self.hasModelQueryParam)
                 self.route('GET', ('json_schema',), self.hasJsonSchema)
+                self.route('GET', ('missing_arg',), self.hasMissingArg)
 
             @access.public
             @describe.autoDescribeRoute(
@@ -325,6 +326,14 @@ class ApiDescribeTestCase(base.TestCase):
             )
             def hasJsonSchema(self, obj, params):
                 return obj
+
+            @access.public
+            @describe.autoDescribeRoute(
+                describe.Description('has_missing_arg')
+                .param('foo', '')
+            )
+            def hasMissingArg(self, params):
+                return params
 
         server.root.api.v1.auto_describe = AutoDescribe()
 
@@ -518,3 +527,49 @@ class ApiDescribeTestCase(base.TestCase):
         })
         self.assertStatusOk(resp)
         self.assertEqual(resp.json, obj)
+
+        # Test missing arg in wrapped function, should fall through to params dict
+        resp = self.request('/auto_describe/missing_arg', params={
+            'foo': 'bar'
+        })
+        self.assertStatusOk(resp)
+        self.assertEqual(resp.json, {'foo': 'bar'})
+
+    def testDeprecatedRoute(self):
+        """
+        Test that a route marked as deprecated is described as deprecated.
+        """
+        class OldResource(Resource):
+            def __init__(self):
+                super(OldResource, self).__init__()
+                self.resourceName = 'old_resource'
+                self.route('GET', (), self.handler)
+                self.route('GET', ('deprecated',), self.deprecatedHandler)
+
+            @access.public
+            @describe.describeRoute(
+                describe.Description('Handler')
+            )
+            def handler(self, params):
+                return None
+
+            @access.public
+            @describe.describeRoute(
+                describe.Description('Deprecated handler')
+                .deprecated()
+            )
+            def deprecatedHandler(self, params):
+                return None
+
+        server.root.api.v1.old_resource = OldResource()
+
+        resp = self.request(path='/describe', method='GET')
+        self.assertStatusOk(resp)
+        self.assertIn('paths', resp.json)
+        self.assertIn('/old_resource', resp.json['paths'])
+        self.assertIn('/old_resource/deprecated', resp.json['paths'])
+        self.assertIn('get', resp.json['paths']['/old_resource'])
+        self.assertNotIn('deprecated', resp.json['paths']['/old_resource']['get'])
+        self.assertIn('get', resp.json['paths']['/old_resource/deprecated'])
+        self.assertIn('deprecated', resp.json['paths']['/old_resource/deprecated']['get'])
+        self.assertTrue(resp.json['paths']['/old_resource/deprecated']['get']['deprecated'])

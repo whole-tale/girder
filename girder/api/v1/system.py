@@ -27,9 +27,11 @@ import os
 import logging
 
 from girder.api import access
-from girder.constants import SettingKey, TokenScope, ACCESS_FLAGS, VERSION
+from girder.constants import GIRDER_ROUTE_ID, GIRDER_STATIC_ROUTE_ID, \
+    SettingKey, TokenScope, ACCESS_FLAGS, VERSION
 from girder.models.model_base import GirderException
-from girder.utility import install, plugin_utilities, system
+from girder.utility import config, install, plugin_utilities, system
+from girder.utility.path import NotFoundException
 from girder.utility.progress import ProgressContext
 from ..describe import API_VERSION, Description, autoDescribeRoute
 from ..rest import Resource, RestException
@@ -47,6 +49,7 @@ class System(Resource):
         self.resourceName = 'system'
         self.route('DELETE', ('setting',), self.unsetSetting)
         self.route('GET', ('version',), self.getVersion)
+        self.route('GET', ('configuration',), self.getConfigurationOption)
         self.route('GET', ('setting',), self.getSetting)
         self.route('GET', ('plugins',), self.getPlugins)
         self.route('GET', ('access_flag',), self.getAccessFlags)
@@ -97,6 +100,25 @@ class System(Resource):
 
     @access.admin(scope=TokenScope.SETTINGS_READ)
     @autoDescribeRoute(
+        Description('Get the value of a system configuration option.')
+        .notes('Must be a system administrator to call this.')
+        .param('section', 'The section identifying the configuration option.', required=True)
+        .param('key', 'The key identifying the configuration option.', required=True)
+        .errorResponse('You are not a system administrator.', 403)
+        .errorResponse('No such option with the given section/key exists.', 404)
+    )
+    def getConfigurationOption(self, section, key, params):
+        configSection = config.getConfig().get(section)
+
+        if configSection is None:
+            raise NotFoundException('No section with that name exists.')
+        elif key not in configSection:
+            raise NotFoundException('No key with that name exists.')
+        else:
+            return configSection.get(key)
+
+    @access.admin(scope=TokenScope.SETTINGS_READ)
+    @autoDescribeRoute(
         Description('Get the value of a system setting, or a list of them.')
         .notes('Must be a system administrator to call this.')
         .param('key', 'The key identifying this setting.', required=False)
@@ -131,10 +153,14 @@ class System(Resource):
         .errorResponse('You are not a system administrator.', 403)
     )
     def getPlugins(self, params):
-        return {
+        plugins = {
             'all': plugin_utilities.findAllPlugins(),
             'enabled': self.model('setting').get(SettingKey.PLUGINS_ENABLED)
         }
+        failureInfo = plugin_utilities.getPluginFailureInfo()
+        if failureInfo:
+            plugins['failed'] = failureInfo
+        return plugins
 
     @access.public
     @autoDescribeRoute(
@@ -156,7 +182,26 @@ class System(Resource):
         .errorResponse('You are not a system administrator.', 403)
     )
     def enablePlugins(self, plugins, params):
-        return self.model('setting').set(SettingKey.PLUGINS_ENABLED, plugins)
+        # Determine what plugins have been disabled and remove their associated routes.
+        setting = self.model('setting')
+        routeTable = setting.get(SettingKey.ROUTE_TABLE)
+        oldPlugins = setting.get(SettingKey.PLUGINS_ENABLED)
+        reservedRoutes = {GIRDER_ROUTE_ID, GIRDER_STATIC_ROUTE_ID}
+
+        routeTableChanged = False
+        removedRoutes = (
+            set(oldPlugins) - set(plugins) - reservedRoutes)
+
+        for route in removedRoutes:
+            if route in routeTable:
+                del routeTable[route]
+                routeTableChanged = True
+
+        if routeTableChanged:
+            setting.set(SettingKey.ROUTE_TABLE, routeTable)
+
+        # Route cleanup is done; update list of enabled plugins.
+        return setting.set(SettingKey.PLUGINS_ENABLED, plugins)
 
     @access.admin
     @autoDescribeRoute(
@@ -271,6 +316,9 @@ class System(Resource):
         .errorResponse('You are not a system administrator.', 403)
     )
     def restartServer(self, params):
+        if not config.getConfig()['server'].get('cherrypy_server', True):
+            raise RestException('Restarting of server is disabled.', 403)
+
         class Restart(cherrypy.process.plugins.Monitor):
             def __init__(self, bus, frequency=1):
                 cherrypy.process.plugins.Monitor.__init__(

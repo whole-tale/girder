@@ -36,6 +36,7 @@ import six
 import sys
 import yaml
 import importlib
+import traceback
 
 import pkg_resources
 from pkg_resources import iter_entry_points
@@ -47,6 +48,21 @@ from girder.models.model_base import ValidationException
 from girder.utility import mail_utils, model_importer
 
 _pluginWebroots = {}
+_pluginFailureInfo = {}
+
+
+def _recordPluginFailureInfo(plugin, traceback):
+    """
+    Record information when a plugin fails to load.
+
+    :param plugin: The name of the plugin that failed to load.
+    :type plugin: str
+    :param traceback: The traceback of the failure.
+    :type trackback: str
+    """
+    _pluginFailureInfo[plugin] = {
+        'traceback': traceback
+    }
 
 
 def loadPlugins(plugins, root, appconf, apiRoot=None, buildDag=True):
@@ -87,16 +103,20 @@ def loadPlugins(plugins, root, appconf, apiRoot=None, buildDag=True):
             root, appconf, apiRoot = loadPlugin(plugin, root, appconf, apiRoot)
             logprint.success('Loaded plugin "%s"' % plugin)
         except Exception:
+            _recordPluginFailureInfo(plugin=plugin, traceback=traceback.format_exc())
             logprint.exception('ERROR: Failed to load plugin "%s":' % plugin)
 
     return root, appconf, apiRoot
 
 
-def getToposortedPlugins(plugins, ignoreMissing=False, keys=('dependencies',)):
+def getToposortedPlugins(plugins=None, ignoreMissing=False, keys=('dependencies',)):
     """
     Given a set of plugins to load, construct the full DAG of required plugins
     to load and yields them in toposorted order.
 
+    :param plugins: A set of plugins that must be in the output list. If you want
+        to toposort all available plugins, omit this parameter.
+    :type plugins: iterable of str
     :param ignoreMissing: Normally if one of the plugins specified does not exist,
         this raises a ValidationError. Set this to False to suppress that and instead
         print an error message and continue.
@@ -104,11 +124,14 @@ def getToposortedPlugins(plugins, ignoreMissing=False, keys=('dependencies',)):
     :param keys: Keys that should be used to determine dependencies.
     :type keys: list of str
     """
-    plugins = set(plugins)
-
     allPlugins = findAllPlugins()
     dag = {}
     visited = set()
+
+    if plugins is None:
+        plugins = set(allPlugins.keys())
+    else:
+        plugins = set(plugins)
 
     def addDeps(plugin):
         if plugin not in allPlugins:
@@ -255,6 +278,9 @@ def findEntryPointPlugins(allPlugins):
                     try:
                         data = json.load(codecs.getreader('utf8')(conf))
                     except ValueError:
+                        _recordPluginFailureInfo(
+                            plugin=entry_point.name,
+                            traceback=traceback.format_exc())
                         logprint.exception(
                             'ERROR: Plugin "%s": plugin.json is not valid '
                             'JSON.' % entry_point.name)
@@ -264,6 +290,9 @@ def findEntryPointPlugins(allPlugins):
                     try:
                         data = yaml.safe_load(conf)
                     except yaml.YAMLError:
+                        _recordPluginFailureInfo(
+                            plugin=entry_point.name,
+                            traceback=traceback.format_exc())
                         logprint.exception(
                             'ERROR: Plugin "%s": plugin.yml is not valid '
                             'YAML.' % entry_point.name)
@@ -299,6 +328,7 @@ def findAllPlugins():
                 try:
                     data = json.load(conf)
                 except ValueError:
+                    _recordPluginFailureInfo(plugin=plugin, traceback=traceback.format_exc())
                     logprint.exception(
                         'ERROR: Plugin "%s": plugin.json is not valid '
                         'JSON.' % plugin)
@@ -307,6 +337,7 @@ def findAllPlugins():
                 try:
                     data = yaml.safe_load(conf)
                 except yaml.YAMLError:
+                    _recordPluginFailureInfo(plugin=plugin, traceback=traceback.format_exc())
                     logprint.exception(
                         'ERROR: Plugin "%s": plugin.yml is not valid '
                         'YAML.' % plugin)
@@ -395,6 +426,10 @@ def registerPluginWebroot(webroot, name):
     global _pluginWebroots
 
     _pluginWebroots[name] = webroot
+
+
+def getPluginFailureInfo():
+    return _pluginFailureInfo
 
 
 class config(object):  # noqa: class name

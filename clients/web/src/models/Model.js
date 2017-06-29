@@ -1,3 +1,4 @@
+import $ from 'jquery';
 import _ from 'underscore';
 import Backbone from 'backbone';
 
@@ -41,8 +42,7 @@ var Model = Backbone.Model.extend({
      */
     save: function () {
         if (this.altUrl === null && this.resourceName === null) {
-            alert('Error: You must set an altUrl or resourceName on your model.');
-            return;
+            throw new Error('An altUrl or resourceName must be set on the Model.');
         }
 
         var path, type;
@@ -55,7 +55,7 @@ var Model = Backbone.Model.extend({
         }
         /* Don't save attributes which are objects using this call.  For
          * instance, if the metadata of an item has keys that contain non-ascii
-         * values, they won't get handled the the rest call. */
+         * values, they won't get handled by the rest call. */
         var data = {};
         _.each(this.keys(), function (key) {
             var value = this.get(key);
@@ -72,7 +72,7 @@ var Model = Backbone.Model.extend({
         }).done(_.bind(function (resp) {
             this.set(resp);
             this.trigger('g:saved');
-        }, this)).error(_.bind(function (err) {
+        }, this)).fail(_.bind(function (err) {
             this.trigger('g:error', err);
         }, this));
     },
@@ -80,14 +80,15 @@ var Model = Backbone.Model.extend({
     /**
      * Fetch a single resource from the server. Triggers g:fetched on success,
      * or g:error on error.
-     * To ignore the default error handler, pass
-     *     ignoreError: true
-     * in your opts object.
+     *
+     * @param {object|undefined} opts: additional options, which can include:
+     *     ignoreError: true - ignore the default error handler
+     *     extraPath - a string to append to the end of the resource path
+     *     data - a dictionary of parameters to pass to the endpoint.
      */
     fetch: function (opts) {
         if (this.altUrl === null && this.resourceName === null) {
-            alert('Error: You must set an altUrl or a resourceName on your model.');
-            return;
+            throw new Error('An altUrl or resourceName must be set on the Model.');
         }
 
         opts = opts || {};
@@ -100,16 +101,19 @@ var Model = Backbone.Model.extend({
         if (opts.ignoreError) {
             restOpts.error = null;
         }
-        return restRequest(restOpts).done(_.bind(function (resp) {
+        if (opts.data) {
+            restOpts.data = opts.data;
+        }
+        return restRequest(restOpts).done((resp) => {
             this.set(resp);
             if (opts.extraPath) {
                 this.trigger('g:fetched.' + opts.extraPath);
             } else {
                 this.trigger('g:fetched');
             }
-        }, this)).error(_.bind(function (err) {
+        }).fail((err) => {
             this.trigger('g:error', err);
-        }, this));
+        });
     },
 
     /**
@@ -145,8 +149,7 @@ var Model = Backbone.Model.extend({
      */
     destroy: function (opts) {
         if (this.altUrl === null && this.resourceName === null) {
-            alert('Error: You must set an altUrl or a resourceName on your model.');
-            return;
+            throw new Error('An altUrl or resourceName must be set on the Model.');
         }
 
         var args = {
@@ -168,7 +171,7 @@ var Model = Backbone.Model.extend({
                 this.collection.remove(this);
             }
             this.trigger('g:deleted');
-        }, this)).error(_.bind(function (err) {
+        }, this)).fail(_.bind(function (err) {
             this.trigger('g:error', err);
         }, this));
     },

@@ -74,14 +74,21 @@ class WebClientTestEndpoints(Resource):
                '"failure".', required=False)
         .param('duration', 'Duration of the test in seconds', required=False,
                dataType='int')
+        .param('resourceId', 'Resource ID associated with the progress notification.',
+               required=False)
+        .param('resourceName', 'Type of resource associated with the progress '
+               'notification.', required=False)
     )
     def testProgress(self, params):
         test = params.get('test', 'success')
         duration = int(params.get('duration', 10))
+        resourceId = params.get('resourceId', None)
+        resourceName = params.get('resourceName', None)
         startTime = time.time()
         with ProgressContext(True, user=self.getCurrentUser(),
                              title='Progress Test', message='Progress Message',
-                             total=duration) as ctx:
+                             total=duration, resource={'_id': resourceId},
+                             resourceName=resourceName) as ctx:
             for current in range(duration):
                 if self.stop:
                     break
@@ -180,7 +187,6 @@ class WebClientTestCase(base.TestCase):
             retry = False
             task = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT)
-            hasJasmine = False
             jasmineFinished = False
             for line in iter(task.stdout.readline, b''):
                 if isinstance(line, six.binary_type):
@@ -195,8 +201,6 @@ class WebClientTestCase(base.TestCase):
                     open('phantom_temp_%s.tmp' % os.environ['GIRDER_PORT'],
                          'wb').write(msg.get_payload(decode=True))
                     continue  # we don't want to print this
-                if 'Jasmine' in line:
-                    hasJasmine = True
                 if 'Testing Finished' in line:
                     jasmineFinished = True
                 try:
@@ -205,10 +209,8 @@ class WebClientTestCase(base.TestCase):
                     sys.stdout.write(repr(line))
                 sys.stdout.flush()
             returncode = task.wait()
-            if not retry and hasJasmine and jasmineFinished:
+            if not retry and jasmineFinished:
                 break
-            if not hasJasmine:
-                time.sleep(1)
             sys.stderr.write('Retrying test\n')
             # If we are retrying, we need to reset the whole test, as the
             # databases and other resources are in an unknown state

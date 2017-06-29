@@ -17,6 +17,7 @@
 #  limitations under the License.
 ###############################################################################
 
+import cherrypy
 import datetime
 import dateutil.parser
 import errno
@@ -142,3 +143,43 @@ class JsonEncoder(json.JSONEncoder):
         elif isinstance(obj, datetime.datetime):
             return obj.replace(tzinfo=pytz.UTC).isoformat()
         return str(obj)
+
+
+class RequestBodyStream(object):
+    """
+    Wraps a cherrypy request body into a more abstract file-like object.
+    """
+    _ITER_CHUNK_LEN = 65536
+
+    def __init__(self, stream, size=None):
+        self.stream = stream
+        self.size = size
+
+    def read(self, *args, **kwargs):
+        return self.stream.read(*args, **kwargs)
+
+    def close(self, *args, **kwargs):
+        pass
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        data = self.read(self._ITER_CHUNK_LEN)
+        if not data:
+            raise StopIteration
+        return data
+
+    def __next__(self):
+        return self.next()
+
+    def getSize(self):
+        """
+        Returns the size of the body data wrapped by this class. For
+        multipart encoding, this is the size of the part. For sending
+        as the body, this is the Content-Length header.
+        """
+        if self.size is not None:
+            return self.size
+
+        return int(cherrypy.request.headers['Content-Length'])

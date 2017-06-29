@@ -9,6 +9,7 @@ import { getPluginConfigRoute } from 'girder/utilities/PluginUtils';
 import { restartServer, rebuildWebClient } from 'girder/server';
 import { restRequest, cancelRestRequests } from 'girder/rest';
 
+import PluginFailedNoticeTemplate from 'girder/templates/widgets/pluginFailedNotice.pug';
 import PluginsTemplate from 'girder/templates/body/plugins.pug';
 
 import 'girder/utilities/jquery/girderEnable';
@@ -29,21 +30,25 @@ var PluginsView = View.extend({
         },
         'click .g-rebuild-and-restart': function (e) {
             confirm({
-                text: `Are you sure you want to rebuild web code and restart 
-                the server? This will interrupt all running tasks for all users.`,
+                text: `Are you sure you want to rebuild web code and restart the server? This will interrupt all running tasks for all users.`,
                 yesText: 'Restart',
                 confirmCallback: function () {
                     $(e.currentTarget).girderEnable(false);
-                    rebuildWebClient().then(() => {
-                        events.trigger('g:alert', {
-                            text: 'Web client code built successfully',
-                            type: 'success',
-                            duration: 3000
+                    rebuildWebClient()
+                        .then(() => {
+                            events.trigger('g:alert', {
+                                text: 'Web client code built successfully',
+                                type: 'success',
+                                duration: 3000
+                            });
+
+                            return restartServer();
+                        })
+                        .always(() => {
+                            // Re-enable the button whether the chain succeeds or fails, though if
+                            // it succeeds, the page will probably be refreshed
+                            $(e.currentTarget).girderEnable(true);
                         });
-                        return restartServer();
-                    }).then(() => {
-                        $(e.currentTarget).girderEnable(true);
-                    });
                 }
             });
         }
@@ -54,17 +59,34 @@ var PluginsView = View.extend({
         if (settings.all && settings.enabled) {
             this.enabled = settings.enabled;
             this.allPlugins = settings.all;
+            this.failed = _.has(settings, 'failed') ? settings.failed : null;
             this.render();
         } else {
+            const promises = [
+                restRequest({
+                    path: 'system/plugins',
+                    type: 'GET'
+                }).then((resp) => resp),
+                restRequest({
+                    path: 'system/configuration',
+                    type: 'GET',
+                    data: {
+                        section: 'server',
+                        key: 'cherrypy_server'
+                    }
+                }).then((resp) => resp)
+            ];
+
             // Fetch the plugin list
-            restRequest({
-                path: 'system/plugins',
-                type: 'GET'
-            }).done(_.bind(function (resp) {
-                this.enabled = resp.enabled;
-                this.allPlugins = resp.all;
+            $.when(...promises).done((plugins, cherrypyServer) => {
+                this.cherrypyServer = cherrypyServer;
+                this.enabled = plugins.enabled;
+                this.allPlugins = plugins.all;
+                this.failed = plugins.failed;
                 this.render();
-            }, this));
+            }).fail(() => {
+                router.navigate('/', { trigger: true });
+            });
         }
     },
 
@@ -80,9 +102,14 @@ var PluginsView = View.extend({
                 info.enabled = true;
                 info.configRoute = getPluginConfigRoute(name);
             }
+
+            if (this.failed && _.has(this.failed, name)) {
+                info.failed = this.failed[name];
+            }
         }, this);
 
         this.$el.html(PluginsTemplate({
+            cherrypyServer: this.cherrypyServer,
             allPlugins: this._sortPlugins(this.allPlugins)
         }));
 
@@ -109,10 +136,20 @@ var PluginsView = View.extend({
             placement: 'bottom',
             delay: { show: 100 }
         });
-        this.$('.g-experimental-notice').tooltip({
+        this.$('.g-plugin-list-item-experimental-notice').tooltip({
             container: this.$el,
             animation: false,
             delay: { show: 100 }
+        });
+        this.$('.g-plugin-list-item-failed-notice').tooltip({
+            title: 'Click to see traceback',
+            container: this.$el,
+            animation: false,
+            delay: { show: 100 }
+        });
+        this.$('.g-plugin-list-item-failed-notice').popover({
+            container: this.$el,
+            template: PluginFailedNoticeTemplate()
         });
 
         return this;

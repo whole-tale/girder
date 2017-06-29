@@ -20,8 +20,8 @@
  * that can extend these.
  */
 var path = require('path');
-var webpack = require('webpack');
 
+var webpack = require('webpack');
 var ExtractTextPlugin = require('extract-text-webpack-plugin');
 
 var paths = require('./webpack.paths.js');
@@ -30,24 +30,10 @@ var es2015Preset = require.resolve('babel-preset-es2015');
 function fileLoader() {
     return {
         loader: 'file-loader',
-        query: {
+        options: {
             name: 'assets/[name]-[hash:8].[ext]'
         }
     };
-}
-
-function urlLoader(options) {
-    options = options || {};
-    var loader = {
-        loader: 'url-loader',
-        query: {
-            limit: 4096
-        }
-    };
-    if (options.mimetype) {
-        loader.query.mimetype = options.mimetype;
-    }
-    return loader;
 }
 
 function _coverageConfig() {
@@ -81,55 +67,73 @@ module.exports = {
             jQuery: 'jquery',
             $: 'jquery',
             'window.jQuery': 'jquery'
-        })
+        }),
+        // Disable writing the output file if a build error occurs
+        new webpack.NoEmitOnErrorsPlugin()
     ],
     module: {
-        loaders: [
+        rules: [
             // ES2015
             {
-                test: /\.js$/,
-                include: loaderPaths,
-                loader: 'babel-loader',
-                exclude: /node_modules/,
-                query: {
-                    presets: [es2015Preset],
-                    env: {
-                        cover: _coverageConfig()
+                resource: {
+                    test: /\.js$/,
+                    include: loaderPaths,
+                    exclude: /node_modules/
+                },
+                use: [
+                    {
+                        loader: 'babel-loader',
+                        options: {
+                            presets: [es2015Preset],
+                            env: {
+                                cover: _coverageConfig()
+                            }
+                        }
                     }
-                }
-            },
-            // JSON files
-            {
-                test: /\.json$/,
-                include: loaderPaths.concat(loaderPathsNodeModules),
-                loader: 'json-loader'
+                ]
             },
             // Stylus
             {
-                test: /\.styl$/,
-                include: loaderPaths,
-                loaders: ExtractTextPlugin.extract({
-                    fallbackLoader: 'style-loader',
-                    // stylus loader query must be a string for now
-                    loader: ['css-loader', 'stylus-loader?resolve url=true']
+                resource: {
+                    test: /\.styl$/,
+                    include: loaderPaths
+                },
+                use: ExtractTextPlugin.extract({
+                    use: [
+                        'css-loader',
+                        {
+                            loader: 'stylus-loader',
+                            options: {
+                                // The 'resolve url' option is not well-documented, but was
+                                // added at https://github.com/shama/stylus-loader/pull/6
+                                'resolve url': true
+                            }
+                        }
+                    ],
+                    fallback: 'style-loader'
                 })
             },
             // CSS
             {
-                test: /\.css$/,
-                include: loaderPathsNodeModules,
-                loaders: ExtractTextPlugin.extract({
-                    fallbackLoader: 'style-loader',
-                    loader: ['css-loader']})
+                resource: {
+                    test: /\.css$/,
+                    include: loaderPathsNodeModules
+                },
+                use: ExtractTextPlugin.extract({
+                    use: ['css-loader'],
+                    fallback: 'style-loader'
+                })
             },
             // Pug
             {
-                test: /\.(pug|jade)$/,
-                include: loaderPaths,
-                loaders: [
+                resource: {
+                    test: /\.(pug|jade)$/,
+                    include: loaderPaths
+                },
+                use: [
                     {
                         loader: 'babel-loader',
-                        query: {
+                        options: {
                             presets: [es2015Preset]
                         }
                     },
@@ -138,53 +142,61 @@ module.exports = {
             },
             // PNG, JPEG
             {
-                test: /\.(png|jpg)$/,
-                include: loaderPathsNodeModules,
-                loaders: [
+                resource: {
+                    test: /\.(png|jpg)$/,
+                    include: loaderPathsNodeModules
+                },
+                use: [
                     fileLoader()
                 ]
             },
             // WOFF
             {
-                test: /\.woff(\?v=\d+\.\d+\.\d+)?$/,
-                include: loaderPathsNodeModules,
-                loaders: [
-                    urlLoader({ mimetype: 'application/font-woff' }),
+                resource: {
+                    test: /\.woff(\?v=\d+\.\d+\.\d+)?$/,
+                    include: loaderPathsNodeModules
+                },
+                use: [
                     fileLoader()
                 ]
             },
             // WOFF2
             {
-                test: /\.woff2(\?v=\d+\.\d+\.\d+)?$/,
-                include: loaderPathsNodeModules,
-                loaders: [
-                    urlLoader({ mimetype: 'application/font-woff2' }),
+                resource: {
+                    test: /\.woff2(\?v=\d+\.\d+\.\d+)?$/,
+                    include: loaderPathsNodeModules
+                },
+                use: [
                     fileLoader()
                 ]
             },
             // TTF
             {
-                test: /\.ttf(\?v=\d+\.\d+\.\d+)?$/,
-                include: loaderPathsNodeModules,
-                loaders: [
-                    urlLoader({ mimetype: 'application/octet-stream' }),
+                resource: {
+                    test: /\.ttf(\?v=\d+\.\d+\.\d+)?$/,
+                    include: loaderPathsNodeModules
+                },
+                use: [
                     fileLoader()
                 ]
             },
             // EOT
             {
-                test: /\.eot(\?v=\d+\.\d+\.\d+)?$/,
-                include: loaderPathsNodeModules,
-                loaders: [
+                resource: {
+                    test: /\.eot(\?v=\d+\.\d+\.\d+)?$/,
+                    include: loaderPathsNodeModules
+                },
+                use: [
                     fileLoader()
                 ]
             },
             // SVG
             {
-                test: /\.svg(\?v=\d+\.\d+\.\d+)?$/,
-                include: loaderPathsNodeModules,
-                loaders: [
-                    urlLoader({ mimetype: 'image/svg+xml' }),
+                resource: {
+                    test: /\.svg(\?v=\d+\.\d+\.\d+)?$/,
+                    include: loaderPathsNodeModules
+                },
+                use: [
                     fileLoader()
                 ]
             }
