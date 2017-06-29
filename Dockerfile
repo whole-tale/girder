@@ -1,4 +1,4 @@
-FROM node:6
+FROM node:6-slim
 MAINTAINER Kitware, Inc. <kitware@kitware.com>
 
 EXPOSE 8080
@@ -6,17 +6,18 @@ EXPOSE 8080
 RUN mkdir /girder
 RUN mkdir /girder/logs
 
-RUN apt-get update && apt-get install -qy software-properties-common python-software-properties && \
-  apt-get update && apt-get install -qy \
+RUN apt-get -qqy update && apt-get install -qy software-properties-common python3-software-properties && \
+  apt-get update -qqy && apt-get install -qy \
     build-essential \
     git \
     libffi-dev \
     libsasl2-dev \
     libldap2-dev \
-    libpython-dev && \
+    libpython3-dev && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN wget https://bootstrap.pypa.io/get-pip.py && python get-pip.py
+RUN npm config set progress false
+RUN wget https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py
 
 WORKDIR /girder
 COPY girder /girder/girder
@@ -29,7 +30,7 @@ COPY setup.py /girder/setup.py
 COPY package.json /girder/package.json
 COPY README.rst /girder/README.rst
 
-RUN pip install -e .[plugins]
+RUN python3 -m pip install -e .[plugins]
 RUN girder-install web --all-plugins
 
-ENTRYPOINT ["python", "-m", "girder"]
+ENTRYPOINT ["python3", "-m", "girder"]
