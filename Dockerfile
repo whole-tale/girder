@@ -31,7 +31,7 @@ COPY setup.py /girder/setup.py
 COPY package.json /girder/package.json
 COPY README.rst /girder/README.rst
 
-RUN python3 -m pip install -e .[plugins]
+RUN python3 -m pip install -e .[plugins,sftp]
 RUN girder-install web --all-plugins
 
 ENTRYPOINT ["python3", "-m", "girder"]
