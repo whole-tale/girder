@@ -1,4 +1,4 @@
-FROM node:6-slim
+FROM node:6
 MAINTAINER Kitware, Inc. <kitware@kitware.com>
 
 EXPOSE 8080
@@ -12,6 +12,7 @@ RUN apt-get -qqy update && apt-get install -qy software-properties-common python
     git \
     libffi-dev \
     libsasl2-dev \
+    libssl-dev \
     libldap2-dev \
     libpython3-dev && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
