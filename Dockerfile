@@ -20,6 +20,15 @@ RUN apt-get -qqy update && apt-get install -qy software-properties-common python
 RUN npm config set progress false
 RUN wget https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py
 
+ENV CMAKE_SHORT_VERSION=3.4 CMAKE_VERSION=3.4.3 MONGO_VERSION=3.2.13
+
+RUN curl -L "http://cmake.org/files/v${CMAKE_SHORT_VERSION}/cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz" | \
+  gunzip -c | \
+  tar -x -C /usr --strip-components 1
+RUN curl -L "https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-${MONGO_VERSION}.tgz" | \
+  gunzip -c | \
+  tar -x -C /usr --strip-components 1
+
 WORKDIR /girder
 COPY girder /girder/girder
 COPY clients /girder/clients
