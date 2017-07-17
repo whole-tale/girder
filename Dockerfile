@@ -28,19 +28,10 @@ RUN curl -L "http://cmake.org/files/v${CMAKE_SHORT_VERSION}/cmake-${CMAKE_VERSIO
 RUN curl -L "https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-${MONGO_VERSION}.tgz" | \
   gunzip -c | \
   tar -x -C /usr --strip-components 1
-
-WORKDIR /girder
-COPY girder /girder/girder
-COPY clients /girder/clients
-COPY plugins /girder/plugins
-COPY scripts /girder/scripts
-COPY grunt_tasks /girder/grunt_tasks
-COPY Gruntfile.js /girder/Gruntfile.js
-COPY setup.py /girder/setup.py
-COPY package.json /girder/package.json
-COPY README.rst /girder/README.rst
-
 RUN python3 -m pip install coverage flake8 flake8-blind-except flake8-docstrings \
   httmock mock moto[server] Sphinx sphinx_rtd_theme virtualenv
+
+RUN git clone https://github.com/xarthisius/girder /girder
+WORKDIR /girder
 RUN python3 -m pip install -e .[plugins,sftp]
 RUN girder-install web --all-plugins --dev
