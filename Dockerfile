@@ -3,9 +3,6 @@ MAINTAINER Kitware, Inc. <kitware@kitware.com>
 
 EXPOSE 8080
 
-RUN mkdir /girder
-RUN mkdir /girder/logs
-
 RUN apt-get -qqy update && apt-get install -qy software-properties-common python3-software-properties && \
   apt-get update -qqy && apt-get install -qy \
     build-essential \
@@ -32,6 +29,7 @@ RUN python3 -m pip install coverage flake8 flake8-blind-except flake8-docstrings
   httmock mock moto[server] Sphinx sphinx_rtd_theme virtualenv
 
 RUN git clone https://github.com/xarthisius/girder /girder
+
 WORKDIR /girder
 RUN python3 -m pip install -e .[plugins,sftp]
 RUN girder-install web --all-plugins --dev
