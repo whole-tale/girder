@@ -10,6 +10,7 @@ RUN apt-get -qqy update && apt-get install -qy software-properties-common python
   apt-get update -qqy && apt-get install -qy \
     build-essential \
     git \
+    xsltproc \
     libffi-dev \
     libsasl2-dev \
     libssl-dev \
