@@ -126,7 +126,9 @@ fieldsMap[AssetstoreType.S3] = {
             accessKeyId: this.$('#g-edit-s3-access-key-id').val(),
             secret: this.$('#g-edit-s3-secret').val(),
             service: this.$('#g-edit-s3-service').val(),
-            readOnly: this.$('#g-edit-s3-readonly').is(':checked')
+            region: this.$('#g-edit-s3-region').val(),
+            readOnly: this.$('#g-edit-s3-readonly').is(':checked'),
+            inferCredentials: this.$('#g-edit-s3-infercredentials').is(':checked')
         };
     },
     set: function () {
@@ -135,7 +137,10 @@ fieldsMap[AssetstoreType.S3] = {
         this.$('#g-edit-s3-access-key-id').val(this.model.get('accessKeyId'));
         this.$('#g-edit-s3-secret').val(this.model.get('secret'));
         this.$('#g-edit-s3-service').val(this.model.get('service'));
+        this.$('#g-edit-s3-region').val(this.model.get('region'));
         this.$('#g-edit-s3-readonly').attr('checked', this.model.get('readOnly') ? 'checked' : undefined);
+        this.$('#g-edit-s3-infercredentials').attr('checked', (this.model.get('inferCredentials')
+                                                               ? 'checked' : undefined));
     }
 };
 
