@@ -61,14 +61,24 @@ class CustomJobStatus(object):
     }
 
     # valid transitions for celery scheduled jobs
+    # N.B. We have the extra worker input/output states defined here for when
+    # we are running girder_worker.run as a regualar celery task
     valid_celery_transitions = {
         JobStatus.QUEUED: [JobStatus.INACTIVE],
-        CANCELING: [JobStatus.INACTIVE, JobStatus.QUEUED],
+        # Note celery tasks can jump straight from INACTIVE to RUNNING
+        JobStatus.RUNNING: [JobStatus.INACTIVE, JobStatus.QUEUED,
+                            FETCHING_INPUT],
+        FETCHING_INPUT: [JobStatus.RUNNING],
+        CONVERTING_INPUT: [JobStatus.RUNNING, FETCHING_INPUT],
+        CONVERTING_OUTPUT: [JobStatus.RUNNING],
+        PUSHING_OUTPUT: [JobStatus.RUNNING, CONVERTING_OUTPUT],
+        CANCELING: [JobStatus.INACTIVE, JobStatus.QUEUED, JobStatus.RUNNING],
+        JobStatus.ERROR: [FETCHING_INPUT, CONVERTING_INPUT, CONVERTING_OUTPUT,
+                          PUSHING_OUTPUT, CANCELING, JobStatus.QUEUED,
+                          JobStatus.RUNNING],
         JobStatus.CANCELED: [CANCELING, JobStatus.INACTIVE, JobStatus.QUEUED,
                              JobStatus.RUNNING],
-        JobStatus.RUNNING: [JobStatus.INACTIVE, JobStatus.QUEUED],
-        JobStatus.ERROR: [JobStatus.QUEUED, JobStatus.RUNNING],
-        JobStatus.SUCCESS: [JobStatus.RUNNING]
+        JobStatus.SUCCESS: [JobStatus.RUNNING, PUSHING_OUTPUT]
     }
 
     @classmethod
@@ -193,12 +203,13 @@ def validateJobStatus(event):
 
 def validTransitions(event):
     """Allow our custom job transitions."""
+    states = None
     if event.info['job']['handler'] == 'worker_handler':
         states = CustomJobStatus.validTransitionsWorker(event.info['status'])
     elif event.info['job']['handler'] == 'celery_handler':
         states = CustomJobStatus.validTransitionsCelery(event.info['status'])
-
-    event.preventDefault().addResponse(states)
+    if states is not None:
+        event.preventDefault().addResponse(states)
 
 
 def load(info):
