@@ -20,7 +20,7 @@ import { AccessType } from 'girder/constants';
 import { confirm, handleClose } from 'girder/dialog';
 import events from 'girder/events';
 import { getModelClassByName, renderMarkdown, formatCount, capitalize } from 'girder/misc';
-import { restRequest, apiRoot } from 'girder/rest';
+import { restRequest, getApiRoot } from 'girder/rest';
 
 import HierarchyBreadcrumbTemplate from 'girder/templates/widgets/hierarchyBreadcrumb.pug';
 import HierarchyWidgetTemplate from 'girder/templates/widgets/hierarchyWidget.pug';
@@ -63,6 +63,8 @@ var HierarchyBreadcrumbView = View.extend({
             current: active,
             descriptionText: descriptionText
         }));
+
+        return this;
     }
 });
 
@@ -287,6 +289,7 @@ var HierarchyWidget = View.extend({
             this._initFolderViewSubwidgets();
             this.itemListView.setElement(this.$('.g-item-list-container')).render();
             this.metadataWidget.setItem(this.parentModel);
+            this.metadataWidget.accessLevel = this.parentModel.getAccessLevel();
             if (this._showMetadata) {
                 this.metadataWidget.setElement(this.$('.g-folder-metadata')).render();
             }
@@ -528,7 +531,8 @@ var HierarchyWidget = View.extend({
                     viewLinks: this._viewLinks,
                     itemFilter: this._itemFilter,
                     showSizes: this._showSizes,
-                    public: this.parentModel.get('public')
+                    public: this.parentModel.get('public'),
+                    accessLevel: this.parentModel.getAccessLevel()
                 });
             } else {
                 this._initFolderViewSubwidgets();
@@ -580,7 +584,6 @@ var HierarchyWidget = View.extend({
      * Prompt the user to delete the currently checked items.
      */
     deleteCheckedDialog: function () {
-        var view = this;
         var folders = this.folderListView.checked;
         var items;
         if (this.itemListView && this.itemListView.checked.length) {
@@ -593,8 +596,8 @@ var HierarchyWidget = View.extend({
                   desc + ')?',
 
             yesText: 'Delete',
-            confirmCallback: function () {
-                var resources = view._getCheckedResourceParam();
+            confirmCallback: () => {
+                var resources = this._getCheckedResourceParam();
                 /* Content on DELETE requests is somewhat oddly supported (I
                  * can't get it to work under jasmine/phantom), so override the
                  * method. */
@@ -603,15 +606,15 @@ var HierarchyWidget = View.extend({
                     type: 'POST',
                     data: {resources: resources, progress: true},
                     headers: {'X-HTTP-Method-Override': 'DELETE'}
-                }).done(function () {
-                    if (items && items.length && view.parentModel.has('nItems')) {
-                        view.parentModel.increment('nItems', -items.length);
+                }).done(() => {
+                    if (items && items.length && this.parentModel.has('nItems')) {
+                        this.parentModel.increment('nItems', -items.length);
                     }
-                    if (folders.length && view.parentModel.has('nFolders')) {
-                        view.parentModel.increment('nFolders', -folders.length);
+                    if (folders.length && this.parentModel.has('nFolders')) {
+                        this.parentModel.increment('nFolders', -folders.length);
                     }
 
-                    view.setCurrentModel(view.parentModel, {setRoute: false});
+                    this.setCurrentModel(this.parentModel, {setRoute: false});
                 });
             }
         };
@@ -767,7 +770,7 @@ var HierarchyWidget = View.extend({
     },
 
     downloadChecked: function () {
-        var url = apiRoot + '/resource/download';
+        var url = getApiRoot() + '/resource/download';
         var resources = this._getCheckedResourceParam();
         var data = {resources: resources};
 
