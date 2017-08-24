@@ -476,12 +476,16 @@ var HierarchyWidget = View.extend({
         this.$('.g-child-count-container').addClass('hide');
 
         var showCounts = _.bind(function () {
+            const folderCount = formatCount(this.parentModel.get('nFolders'));
             this.$('.g-child-count-container').removeClass('hide');
-            this.$('.g-subfolder-count').text(
-                formatCount(this.parentModel.get('nFolders')));
+            this.$('.g-subfolder-count').text(folderCount);
+            const folderTooltip = folderCount === 1 ? `${folderCount} total folder` : `${folderCount} total folders`;
+            this.$('.g-subfolder-count-container').attr('title', folderTooltip);
             if (this.parentModel.has('nItems')) {
-                this.$('.g-item-count').text(
-                    formatCount(this.parentModel.get('nItems')));
+                const itemCount = formatCount(this.parentModel.get('nItems'));
+                this.$('.g-item-count').text(itemCount);
+                const itemTooltip = itemCount === 1 ? `${itemCount} total item` : `${itemCount} total items`;
+                this.$('.g-item-count-container').attr('title', itemTooltip);
             }
         }, this);
 
@@ -602,8 +606,8 @@ var HierarchyWidget = View.extend({
                  * can't get it to work under jasmine/phantom), so override the
                  * method. */
                 restRequest({
-                    path: 'resource',
-                    type: 'POST',
+                    url: 'resource',
+                    method: 'POST',
                     data: {resources: resources, progress: true},
                     headers: {'X-HTTP-Method-Override': 'DELETE'}
                 }).done(() => {
@@ -847,8 +851,8 @@ var HierarchyWidget = View.extend({
         var nFolders = (pickedResources.resources.folder || []).length;
         var nItems = (pickedResources.resources.item || []).length;
         restRequest({
-            path: 'resource/move',
-            type: 'PUT',
+            url: 'resource/move',
+            method: 'PUT',
             data: {
                 resources: resources,
                 parentType: this.parentModel.resourceName,
@@ -870,8 +874,8 @@ var HierarchyWidget = View.extend({
         var nFolders = (pickedResources.resources.folder || []).length;
         var nItems = (pickedResources.resources.item || []).length;
         restRequest({
-            path: 'resource/copy',
-            type: 'POST',
+            url: 'resource/copy',
+            method: 'POST',
             data: {
                 resources: resources,
                 parentType: this.parentModel.resourceName,
@@ -899,7 +903,7 @@ var HierarchyWidget = View.extend({
     },
 
     redirectViaForm: function (method, url, data) {
-        var form = $('<form action="' + url + '" method="' + method + '"/>');
+        var form = $('<form/>').attr({action: url, method: method});
         _.each(data, function (value, key) {
             form.append($('<input/>').attr({type: 'text', name: key, value: value}));
         });
