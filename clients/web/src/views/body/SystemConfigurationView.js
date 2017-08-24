@@ -46,8 +46,8 @@ var SystemConfigurationView = View.extend({
             }, this);
 
             restRequest({
-                type: 'PUT',
-                path: 'system/setting',
+                method: 'PUT',
+                url: 'system/setting',
                 data: {
                     list: JSON.stringify(settings)
                 },
@@ -72,6 +72,7 @@ var SystemConfigurationView = View.extend({
         cancelRestRequests('fetch');
 
         var keys = [
+            'core.contact_email_address',
             'core.cookie_lifetime',
             'core.email_from_address',
             'core.email_host',
@@ -94,8 +95,8 @@ var SystemConfigurationView = View.extend({
         ];
         this.settingsKeys = keys;
         restRequest({
-            path: 'system/setting',
-            type: 'GET',
+            url: 'system/setting',
+            method: 'GET',
             data: {
                 list: JSON.stringify(keys),
                 default: 'none'
@@ -103,8 +104,8 @@ var SystemConfigurationView = View.extend({
         }).done(_.bind(function (resp) {
             this.settings = resp;
             restRequest({
-                path: 'system/setting',
-                type: 'GET',
+                url: 'system/setting',
+                method: 'GET',
                 data: {
                     list: JSON.stringify(keys),
                     default: 'default'
