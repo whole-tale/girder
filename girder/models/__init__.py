@@ -66,10 +66,12 @@ def getDbConnection(uri=None, replicaSet=None, autoRetry=True, quiet=False, **kw
     if origKey in _dbClients:
         return _dbClients[origKey]
 
+    dbConf = getDbConfig()
+
     if uri is None or uri == '':
-        dbConf = getDbConfig()
         uri = dbConf.get('uri')
         replicaSet = dbConf.get('replica_set')
+
     clientOptions = {
         # This is the maximum time between when we fetch data from a cursor.
         # If it times out, the cursor is lost and we can't reconnect.  If it
@@ -79,8 +81,9 @@ def getDbConnection(uri=None, replicaSet=None, autoRetry=True, quiet=False, **kw
         'socketTimeoutMS': 60000,
         'connectTimeoutMS': 20000,
         'serverSelectionTimeoutMS': 20000,
-        'read_preference': ReadPreference.SECONDARY_PREFERRED,
-        'replicaSet': replicaSet
+        'readPreference': dbConf.get('read_preference'),
+        'replicaSet': replicaSet,
+        'w': dbConf.get('write_concern')
     }
     clientOptions.update(kwargs)
     # if the connection URI overrides any option, honor it above our own
