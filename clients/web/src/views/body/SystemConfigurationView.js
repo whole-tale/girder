@@ -13,7 +13,6 @@ import SystemConfigurationTemplate from 'girder/templates/body/systemConfigurati
 import 'girder/stylesheets/body/systemConfig.styl';
 
 import 'bootstrap/js/collapse';
-import 'bootstrap/js/tooltip';
 import 'bootstrap/js/transition';
 import 'bootstrap-switch'; // /dist/js/bootstrap-switch.js',
 import 'bootstrap-switch/dist/css/bootstrap3/bootstrap-switch.css';
@@ -65,7 +64,10 @@ var SystemConfigurationView = View.extend({
                 this.$('#g-settings-error-message').text(resp.responseJSON.message);
             }, this));
         },
-        'click #g-restart-server': restartServerPrompt
+        'click #g-restart-server': restartServerPrompt,
+        'click #g-core-banner-default-color': function () {
+            this.$('#g-core-banner-color').val(this.defaults['core.banner_color']);
+        }
     },
 
     initialize: function () {
@@ -74,6 +76,7 @@ var SystemConfigurationView = View.extend({
         var keys = [
             'core.contact_email_address',
             'core.brand_name',
+            'core.banner_color',
             'core.cookie_lifetime',
             'core.email_from_address',
             'core.email_host',
@@ -130,12 +133,6 @@ var SystemConfigurationView = View.extend({
                                 }),
             JSON: window.JSON
         }));
-
-        this.$('input[title]').tooltip({
-            container: this.$el,
-            animation: false,
-            delay: { show: 200 }
-        });
 
         var enableCollectionCrreationPolicy = this.settings['core.collection_create_policy'] ? this.settings['core.collection_create_policy'].open : false;
 
