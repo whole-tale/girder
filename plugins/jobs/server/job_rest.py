@@ -21,6 +21,8 @@ from girder.api import access
 from girder.api.describe import Description, autoDescribeRoute
 from girder.api.rest import Resource, filtermodel
 from girder.constants import AccessType, SortDir
+from girder.models.user import User
+from .models.job import Job as JobModel
 from . import constants
 
 
@@ -29,6 +31,7 @@ class Job(Resource):
     def __init__(self):
         super(Job, self).__init__()
         self.resourceName = 'job'
+        self._model = JobModel()
 
         self.route('GET', (), self.listJobs)
         self.route('POST', (), self.createJob)
@@ -41,15 +44,14 @@ class Job(Resource):
         self.route('GET', ('typeandstatus',), self.jobsTypesAndStatuses)
 
     @access.public
-    @filtermodel(model='job', plugin='jobs')
+    @filtermodel(model=JobModel)
     @autoDescribeRoute(
         Description('List jobs for a given user.')
         .param('userId', 'The ID of the user whose jobs will be listed. If '
                'not passed or empty, will use the currently logged in user. If '
                'set to "None", will list all jobs that do not have an owning '
                'user.', required=False)
-        .modelParam('parentId', 'Id of the parent job.', model='job',
-                    plugin='jobs', level=AccessType.ADMIN,
+        .modelParam('parentId', 'Id of the parent job.', model=JobModel, level=AccessType.ADMIN,
                     destName='parentJob', paramType='query', required=False)
         .jsonParam('types', 'Filter for type', requireArray=True, required=False)
         .jsonParam('statuses', 'Filter for status', requireArray=True, required=False)
@@ -62,49 +64,48 @@ class Job(Resource):
         elif userId.lower() == 'none':
             user = 'none'
         else:
-            user = self.model('user').load(
-                userId, user=currentUser, level=AccessType.READ)
+            user = User().load(userId, user=currentUser, level=AccessType.READ)
 
         parent = None
         if parentJob:
             parent = parentJob
 
-        return list(self.model('job', 'jobs').list(
+        return list(self._model.list(
             user=user, offset=offset, limit=limit, types=types,
-            statuses=statuses, sort=sort, currentUser=currentUser,
-            parentJob=parent))
+            statuses=statuses, sort=sort, currentUser=currentUser, parentJob=parent))
 
-    @filtermodel(model='job', plugin='jobs')
+    @filtermodel(model=JobModel)
     @access.token(scope=constants.REST_CREATE_JOB_TOKEN_SCOPE, required=True)
     @autoDescribeRoute(
         Description('Create a job model')
-        .param('title', '', required=True)
-        .param('type', '', required=True)
-        .modelParam('parentId', 'ID of the parent job.', model='job',
-                    plugin='jobs', level=AccessType.ADMIN,
-                    destName='parentJob', paramType='query', required=False)
-        .param('public', '', required=False, dataType='boolean', default=False)
-        .param('handler', '', required=False, dataType='string')
+        .param('title', 'Title of the job.', required=True)
+        .param('type', 'Type of the job.', required=True)
+        .modelParam('parentId', 'ID of the parent job.', model=JobModel, destName='parentJob',
+                    paramType='query', required=False)
+        .param('public', 'Whether the job is publicly visible.', required=False,
+               dataType='boolean', default=False)
+        .param('handler', 'Job handler string.', required=False)
         .jsonParam('args', 'Job arguments', required=False, requireArray=True)
-        .jsonParam('kwargs', 'Job keyword arguments', required=False,
-                   requireObject=True)
+        .jsonParam('kwargs', 'Job keyword arguments', required=False, requireObject=True)
         .jsonParam('otherFields', 'Other fields specific to the job handler',
                    requireObject=True, required=False)
     )
     def createJob(self, title, type, parentJob, public, handler, args, kwargs, otherFields):
-        return self.model('job', 'jobs').createJob(
-            title=title,
-            type=type,
-            public=public,
-            handler=handler,
-            user=self.getCurrentUser(),
-            args=args,
-            kwargs=kwargs,
-            parentJob=parentJob,
-            otherFields=otherFields)
+        params = {
+            'title': title,
+            'type': type,
+            'public': public,
+            'handler': handler,
+            'user': self.getCurrentUser(),
+            'args': args,
+            'kwargs': kwargs,
+            'parentJob': parentJob,
+            'otherFields': otherFields
+        }
+        return self._model.createJob(**params)
 
     @access.admin
-    @filtermodel(model='job', plugin='jobs')
+    @filtermodel(model=JobModel)
     @autoDescribeRoute(
         Description('List all jobs.')
         .jsonParam('types', 'Filter for type', requireArray=True, required=False)
@@ -113,16 +114,15 @@ class Job(Resource):
     )
     def listAllJobs(self, types, statuses, limit, offset, sort):
         currentUser = self.getCurrentUser()
-        return list(self.model('job', 'jobs').list(
+        return list(self._model.list(
             user='all', offset=offset, limit=limit, types=types,
             statuses=statuses, sort=sort, currentUser=currentUser))
 
     @access.public
-    @filtermodel(model='job', plugin='jobs')
+    @filtermodel(JobModel)
     @autoDescribeRoute(
         Description('Get a job by ID.')
-        .modelParam('id', 'The ID of the job.', model='job', plugin='jobs', force=True,
-                    includeLog=True)
+        .modelParam('id', 'The ID of the job.', model=JobModel, force=True, includeLog=True)
         .errorResponse('ID was invalid.')
         .errorResponse('Read access was denied for the job.', 403)
     )
@@ -132,15 +132,14 @@ class Job(Resource):
         # If the job is not public check access
         if not job.get('public', False):
             if user:
-                self.model('job', 'jobs').requireAccess(
-                    job, user, level=AccessType.READ)
+                self._model.requireAccess(job, user, level=AccessType.READ)
             else:
                 self.ensureTokenScopes('jobs.job_' + str(job['_id']))
 
         return job
 
     @access.token
-    @filtermodel(model='job', plugin='jobs')
+    @filtermodel(JobModel)
     @autoDescribeRoute(
         Description('Update an existing job.')
         .notes('In most cases, regular users should not call this endpoint. It '
@@ -149,7 +148,7 @@ class Job(Resource):
                'user-associated token for authorization, the token must be '
                'granted the "jobs.job_<id>" scope, where <id> is the ID of '
                'the job being updated.')
-        .modelParam('id', 'The ID of the job.', model='job', plugin='jobs', force=True)
+        .modelParam('id', 'The ID of the job.', model=JobModel, force=True)
         .param('log', 'A message to add to the job\'s log field. If you want '
                'to overwrite any existing log content, pass another parameter '
                '"overwrite=true".', required=False)
@@ -172,12 +171,11 @@ class Job(Resource):
                   progressMessage):
         user = self.getCurrentUser()
         if user:
-            self.model('job', 'jobs').requireAccess(
-                job, user, level=AccessType.WRITE)
+            self._model.requireAccess(job, user, level=AccessType.WRITE)
         else:
             self.ensureTokenScopes('jobs.job_' + str(job['_id']))
 
-        return self.model('job', 'jobs').updateJob(
+        return self._model.updateJob(
             job, log=log, status=status, overwrite=overwrite, notify=notify,
             progressCurrent=progressCurrent, progressTotal=progressTotal,
             progressMessage=progressMessage)
@@ -185,12 +183,12 @@ class Job(Resource):
     @access.user
     @autoDescribeRoute(
         Description('Delete an existing job.')
-        .modelParam('id', 'The ID of the job.', model='job', plugin='jobs', level=AccessType.ADMIN)
+        .modelParam('id', 'The ID of the job.', model=JobModel, level=AccessType.ADMIN)
         .errorResponse('ID was invalid.')
         .errorResponse('Admin access was denied for the job.', 403)
     )
     def deleteJob(self, job):
-        self.model('job', 'jobs').remove(job)
+        self._model.remove(job)
 
     @access.admin
     @autoDescribeRoute(
@@ -198,7 +196,7 @@ class Job(Resource):
         .errorResponse('Admin access was denied for the job.', 403)
     )
     def allJobsTypesAndStatuses(self):
-        return self.model('job', 'jobs').getAllTypesAndStatuses(user='all')
+        return self._model.getAllTypesAndStatuses(user='all')
 
     @access.user
     @autoDescribeRoute(
@@ -206,15 +204,15 @@ class Job(Resource):
     )
     def jobsTypesAndStatuses(self):
         currentUser = self.getCurrentUser()
-        return self.model('job', 'jobs').getAllTypesAndStatuses(user=currentUser)
+        return self._model.getAllTypesAndStatuses(user=currentUser)
 
     @access.user
-    @filtermodel(model='job', plugin='jobs')
+    @filtermodel(JobModel)
     @autoDescribeRoute(
         Description('Cancel a job by ID.')
-        .modelParam('id', 'The ID of the job.', model='job', plugin='jobs', level=AccessType.WRITE,
+        .modelParam('id', 'The ID of the job.', model=JobModel, level=AccessType.WRITE,
                     includeLog=False)
         .errorResponse('ID was invalid.')
         .errorResponse('Write access was denied for the job.', 403))
     def cancelJob(self, job, params):
-        return self.model('job', 'jobs').cancelJob(job)
+        return self._model.cancelJob(job)

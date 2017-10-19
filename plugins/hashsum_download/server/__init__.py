@@ -24,12 +24,13 @@ import warnings
 from girder import events
 from girder.api import access
 from girder.api.describe import autoDescribeRoute, Description
-from girder.api.rest import RestException, setRawResponse, setResponseHeader
+from girder.api.rest import RestException, setRawResponse, setResponseHeader, setContentDisposition
 from girder.api.v1.file import File
 from girder.constants import AccessType, TokenScope
 from girder.models.model_base import ValidationException
+from girder.models.file import File as FileModel
+from girder.models.setting import Setting
 from girder.utility import setting_utilities
-from girder.utility.model_importer import ModelImporter
 from girder.utility.progress import ProgressContext, noProgress
 
 SUPPORTED_ALGORITHMS = {'sha512'}
@@ -49,7 +50,7 @@ class HashedFile(File):
         return SUPPORTED_ALGORITHMS
 
     def __init__(self, node):
-        super(File, self).__init__()
+        super(HashedFile, self).__init__()
 
         node.route('GET', ('hashsum', ':algo', ':hash', 'download'), self.downloadWithHash)
         node.route('GET', (':id', 'hashsum_file', ':algo'), self.downloadKeyFile)
@@ -59,10 +60,11 @@ class HashedFile(File):
     @access.public(scope=TokenScope.DATA_READ)
     @autoDescribeRoute(
         Description('Download the hashsum key file for a given file.')
-        .modelParam('id', 'The ID of the file.', model='file', level=AccessType.READ)
+        .modelParam('id', 'The ID of the file.', model=FileModel, level=AccessType.READ)
         .param('algo', 'The hashsum algorithm.', paramType='path', lower=True,
                enum=SUPPORTED_ALGORITHMS)
         .notes('This is meant to be used in conjunction with CMake\'s ExternalData module.')
+        .produces('text/plain')
         .errorResponse()
         .errorResponse('Read access was denied on the file.', 403)
     )
@@ -71,15 +73,15 @@ class HashedFile(File):
 
         if algo not in file:
             raise RestException('This file does not have the %s hash computed.' % algo)
-        hash = file[algo]
+        keyFileBody = '%s\n' % file[algo]
         name = '.'.join((file['name'], algo))
 
-        setResponseHeader('Content-Length', len(hash))
+        setResponseHeader('Content-Length', len(keyFileBody))
         setResponseHeader('Content-Type', 'text/plain')
-        setResponseHeader('Content-Disposition', 'attachment; filename="%s"' % name)
+        setContentDisposition(name)
         setRawResponse()
 
-        return hash
+        return keyFileBody
 
     @access.cookie
     @access.public(scope=TokenScope.DATA_READ)
@@ -101,7 +103,7 @@ class HashedFile(File):
     @access.user(scope=TokenScope.DATA_WRITE)
     @autoDescribeRoute(
         Description('Manually compute the checksum values for a given file.')
-        .modelParam('id', 'The ID of the file.', model='file', level=AccessType.WRITE)
+        .modelParam('id', 'The ID of the file.', model=FileModel, level=AccessType.WRITE)
         .param('progress', 'Whether to track progress of the operation', dataType='boolean',
                default=False, required=False)
         .errorResponse()
@@ -136,7 +138,7 @@ class HashedFile(File):
         self._validateAlgo(algo)
 
         query = {algo: hash}  # Always convert to lower case
-        fileModel = self.model('file')
+        fileModel = FileModel()
         cursor = fileModel.find(query)
 
         if not user:
@@ -154,7 +156,7 @@ def _computeHashHook(event):
     Event hook that computes the file hashes in the background after
     a completed upload. Only done if the AUTO_COMPUTE setting enabled.
     """
-    if ModelImporter.model('setting').get(PluginSettings.AUTO_COMPUTE, default=False):
+    if Setting().get(PluginSettings.AUTO_COMPUTE, default=False):
         _computeHash(event.info['file'])
 
 
@@ -174,7 +176,7 @@ def _computeHash(file, progress=noProgress):
     if not toCompute:
         return
 
-    fileModel = ModelImporter.model('file')
+    fileModel = FileModel()
     with fileModel.open(file) as fh:
         while True:
             chunk = fh.read(_CHUNK_LEN)
@@ -200,7 +202,6 @@ def _validateAutoCompute(doc):
 
 def load(info):
     HashedFile(info['apiRoot'].file)
-    ModelImporter.model('file').exposeFields(
-        level=AccessType.READ, fields=SUPPORTED_ALGORITHMS)
+    FileModel().exposeFields(level=AccessType.READ, fields=SUPPORTED_ALGORITHMS)
 
     events.bind('data.process', info['name'], _computeHashHook)

@@ -24,6 +24,7 @@ from datetime import datetime
 
 from ..describe import Description, autoDescribeRoute
 from ..rest import Resource, setResponseHeader
+from girder.models.notification import Notification as NotificationModel
 from girder.utility import JsonEncoder
 from girder.api import access
 
@@ -67,6 +68,7 @@ class Notification(Resource):
                dataType='integer', required=False, default=DEFAULT_STREAM_TIMEOUT)
         .param('since', 'Filter out events before this time stamp.',
                dataType='integer', required=False)
+        .produces('text/event-stream')
         .errorResponse()
         .errorResponse('You are not logged in.', 403)
     )
@@ -85,8 +87,7 @@ class Notification(Resource):
             wait = MIN_POLL_INTERVAL
             while cherrypy.engine.state == cherrypy.engine.states.STARTED:
                 wait = min(wait + MIN_POLL_INTERVAL, MAX_POLL_INTERVAL)
-                for event in self.model('notification').get(
-                        user, lastUpdate, token=token):
+                for event in NotificationModel().get(user, lastUpdate, token=token):
                     if lastUpdate is None or event['updated'] > lastUpdate:
                         lastUpdate = event['updated']
                     wait = MIN_POLL_INTERVAL

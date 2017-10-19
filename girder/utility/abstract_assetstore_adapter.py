@@ -19,9 +19,10 @@ import os
 import re
 import six
 
-from girder.api.rest import setResponseHeader
+from girder.api.rest import setResponseHeader, setContentDisposition
 from girder.constants import SettingKey
 from girder.models.model_base import GirderException, ValidationException
+from girder.models.setting import Setting
 from girder.utility import progress, RequestBodyStream
 from .model_importer import ModelImporter
 
@@ -342,14 +343,7 @@ class AbstractAssetstoreAdapter(ModelImporter):
         setResponseHeader(
             'Content-Type',
             file.get('mimeType') or 'application/octet-stream')
-        if contentDisposition == 'inline':
-            setResponseHeader(
-                'Content-Disposition',
-                'inline; filename="%s"' % file['name'])
-        else:
-            setResponseHeader(
-                'Content-Disposition',
-                'attachment; filename="%s"' % file['name'])
+        setContentDisposition(file['name'], contentDisposition or 'attachment')
         setResponseHeader('Content-Length', max(endByte - offset, 0))
 
         if (offset or endByte < file['size']) and file['size']:
@@ -374,9 +368,8 @@ class AbstractAssetstoreAdapter(ModelImporter):
             return
         if upload['received'] + chunkSize > upload['size']:
             raise ValidationException('Received too many bytes.')
-        if upload['received'] + chunkSize != upload['size'] and \
-                chunkSize < self.model('setting').get(
-                SettingKey.UPLOAD_MINIMUM_CHUNK_SIZE):
+        if (upload['received'] + chunkSize != upload['size'] and
+                chunkSize < Setting().get(SettingKey.UPLOAD_MINIMUM_CHUNK_SIZE)):
             raise ValidationException('Chunk is smaller than the minimum size.')
 
     def cancelUpload(self, upload):

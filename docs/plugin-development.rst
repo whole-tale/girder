@@ -239,19 +239,45 @@ classes, and we can add it to the API in the ``load()`` method.
     def load(info):
         info['apiRoot'].cat = Cat()
 
+Adding a prefix to an API
+*************************
+
+It is possible to provide a prefix to your API, allowing associated endpoints to
+be grouped together. This is done by creating a prefix when mounting the resouce.
+Note that ``resourceName`` is **not** provided as the resource name is also derived
+from the mount location.
+
+
+.. code-block:: python
+
+    from girder.api.rest import Resource, Prefix
+
+    class Cat(Resource):
+        def __init__(self):
+            super(Cat, self).__init__()
+
+            self.route('GET', (), self.findCat)
+            self.route('GET', (':id',), self.getCat)
+            self.route('POST', (), self.createCat)
+            self.route('PUT', (':id',), self.updateCat)
+            self.route('DELETE', (':id',), self.deleteCat)
+
+        def getCat(self, id, params):
+            ...
+
+    def load(info):
+        info['apiRoot'].meow = Prefix()
+        info['apiRoot'].meow.cat = Cat()
+
+The endpoints are now mounted at meow/cat/
+
+
 Adding a new model type in your plugin
 **************************************
 
 Most of the time, if you add a new resource type in your plugin, you'll have a
 ``Model`` class backing it. These model classes work just like the core model
-classes as described in the :ref:`models` section. They must live under the
-``server/models`` directory of your plugin, so that they can use the
-``ModelImporter`` behavior. If you make a ``Cat`` model in your plugin, you
-could access it using ::
-
-    self.model('cat', 'cats')
-
-Where the second argument to ``model`` is the name of your plugin.
+classes as described in the :ref:`models` section.
 
 Adding custom access flags
 **************************
@@ -276,13 +302,15 @@ can call ``requireAccessFlags``, e.g.:
 
 .. code-block:: python
 
+    from girder.plugins.cats.models.cat import Cat
+
     @access.user
     @autoDescribeRoute(
         Description('Feed a cat')
-        .modelParam('id', 'ID of the cat', model='cat', plugin='cats', level=AccessType.WRITE)
+        .modelParam('id', 'ID of the cat', model=Cat, level=AccessType.WRITE)
     )
     def feedCats(self, cat, params):
-        self.model('cat').requireAccessFlags(item, user=getCurrentUser(), flags='cats.feed')
+        Cat().requireAccessFlags(item, user=getCurrentUser(), flags='cats.feed')
 
         # Feed the cats ...
 
@@ -537,6 +565,9 @@ That will cause both ``plugin.min.*`` and ``external.min.*`` files to appear in 
 built directory. The file paths of the entry points should be specified relative to the
 plugin directory.
 
+
+.. _webpackhelper:
+
 Customizing the Webpack Build
 *****************************
 
@@ -549,7 +580,7 @@ plugin build - that returns a modified webpack configuration to use to build the
 plugin. This can be useful if you wish to use custom webpack loaders or plugins
 to build your plugin.
 
-The hash passed to the helper function contains the following information:
+The object passed to the helper function contains the following keys:
 
 - ``plugin``: the name of the plugin
 - ``output``: the name of the output bundle, which is "plugin" by default.
@@ -579,14 +610,8 @@ default):
 Installing custom dependencies from npm
 ***************************************
 
-There are two types of node dependencies you may need to install for your plugin.
-Each type needs to be installed differently due to how node manages external packages.
-
-- Run time dependencies that your application relies on may be handled in one
-  of two ways. If you are writing a simple plugin that does not contain its own
-  Gruntfile, these dependencies should be installed into Girder's own
-  **node_modules** directory by specifying them in the ``npm.dependencies``
-  section of your ``plugin.json`` file.
+If your application requires third-party npm packages to be installed, there are a few ways to achieve this. The
+first is to declare them in your ``plugin.json`` file under ``npm.dependencies``:
 
   .. code-block:: json
 
@@ -599,7 +624,7 @@ Each type needs to be installed differently due to how node manages external pac
           }
       }
 
-  You can also name a JSON file containing NPM dependencies, as follows:
+You can also name a JSON file containing NPM dependencies, as follows:
 
   .. code-block:: json
 
@@ -612,72 +637,41 @@ Each type needs to be installed differently due to how node manages external pac
           }
       }
 
-  The ``npm.file`` property is a path to a JSON file relative to the plugin
-  directory (``package.json`` is a convenient choice, simply because the ``npm
-  install --save-dev`` command manipulates this file by default), while
-  ``npm.fields`` specifies which top-level keys in that file contain package names
-  to install (by default, this property has the value ``['devDependencies',
-  'dependencies', 'optionalDependencies']``). If the ``localNodeModules`` option
-  is set to ``true``, then the
-  dependencies will be installed to a directory named ``node_modules_<pluginname>``,
-  alongside Girder's own ``node_modules`` directory. Such modules must be
-  referenced in plugin code with a special alias: ``plugins/<pluginname>/node``.
-  For example:
+The ``npm.file`` property is a path to a JSON file relative to the plugin
+directory (``package.json`` is a convenient choice, simply because the ``npm
+install --save-dev`` command manipulates this file by default), while
+``npm.fields`` specifies which top-level keys in that file contain package names
+to install (by default, this property has the value ``['devDependencies',
+'dependencies', 'optionalDependencies']``). If the ``localNodeModules`` option
+is set to ``true``, then the dependencies will be installed within a separate
+directory so that they will not collide with Girder's own set of node_modules.
 
-  .. code-block:: javascript
+The final alternative for Webpack-built plugins is to set the ``npm.install``
+configuration property to ``true``; this will cause the build system to run
+``npm install`` in the plugin directory.
 
-      import foobar from 'girder_plugins/MY_PLUGIN/node/foobar'
+When you use the `import` directive within your plugin code, for example:
 
-  would import the default value from NPM dependency ``foobar`` as installed
-  in ``MY_PLUGIN``'s dedicated ``node_modules_MY_PLUGIN`` directory. This is mainly
-  useful if you need a different version of a package already in use by Girder
-  core, or if for any other reason you prefer to keep your plugin dependencies
-  isolated. By default, the ``localNodeModules`` is set to ``false`` and the
-  dependencies will be installed to Girder's own ``node_modules`` directory.
+.. code-block:: javascript
 
-  The final alternative for Webpack-built plugins is to set the ``npm.install``
-  configuration property to ``true``; this will cause the build system to run
-  ``npm install`` in the plugin directory. This may have certain benefits for
-  plugin development, such as allowing plugin sources to import modules without
-  the alias prefix as described above (though, this alias would still be
-  available for use by other plugins that want to access your plugin's
-  dependencies). Additionally, if your plugin is installed without using
-  symlinks, then you will still have access to Girder's Node dependencies (see
-  this [GitHub conversation](https://github.com/nodejs/node/issues/3402) for a
-  discussion of why symlinked directories will not allow for the usual Node
-  import semantics).
+    import foobar from 'foobar';
 
-  If instead you are using a custom Grunt build with a Gruntfile, the
-  dependencies should be installed into your plugin's **node_modules** directory
-  by providing a `package.json <https://docs.npmjs.com/files/package.json>`_
-  file just as they are used for standalone node applications.  When such a file
-  exists in your plugin directory, ``npm install`` will be executed in a new
-  process from within your package's directory.
+The build process will search for the ``'foobar'`` module in the following locations, in order:
 
-- Build time dependencies that your Grunt tasks rely on to assemble the sources
-  for deployment need to be installed into Girder's own **node_modules** directory.
-  These dependencies will typically be Grunt extensions defining extra tasks used
-  by your build.  Such dependencies should be listed under ``grunt.dependencies``
-  as an object (much like dependencies in **package.json**) inside your
-  **plugin.json** or **plugin.yml** file.
+1. The plugin's local modules directory that is created if ``npm.localNodeModules`` has
+   been set to ``true`` in the plugin configuration file.
+2. The ``node_modules`` directory underneath the plugin directory, which would exist when using
+   ``npm.install: true``, or if node modules had been installed there manually.
+3. Within Girder's own ``node_modules`` directory.
 
-  .. code-block:: json
+.. note:: One notable exception to this rule is for the jQuery library; having multiple versions of jQuery from
+different targets often breaks things at runtime, so plugins will always use the same jQuery
+as Girder core.
 
-      {
-          "name": "MY_PLUGIN",
-          "grunt": {
-              "dependencies": {
-                  "grunt-contrib-concat": ">=1.0.1"
-              }
-          }
-      }
-
-  In addition to installing these dependencies, Girder will also load grunt extensions
-  contained in them before executing any tasks.
-
-.. note:: Packages installed into Girder's scope can possibly overwrite an alternate
-          version of the same package.  Care should be taken to only list packages here
-          that are not already provided by Girder's own build time dependencies.
+If for some reason you need to modify this search order for your plugin, you can do so via the ``webpack.helper.js``
+file documented in the :ref:`webpackhelper` section. To do so, you can override the ``resolve.modules`` field of
+the configuration and set it to a list of paths to search in order. If you need to modify the path to search for
+webpack loaders instead of module imports, use the ``resolveLoader.modules`` list instead.
 
 Controlling the Build Output
 ****************************
@@ -966,21 +960,21 @@ For example, the cats plugin would define tests in a ``plugin_tests/catSpec.js``
 Using External Data Artifacts
 *****************************
 
-Plugin tests can also use the external data interface provided by Girder as described in
-:ref:`use_external_data`.  The data key files should be placed inside a directory
-called ``plugin_tests/data/``.  Tests which depend on these files should be explicitly added using
-the ``EXTERNAL_DATA`` option, with arguments of data file names (without the hash file extension)
-prefixed by ``plugins/<plugin_name>``. For example:
+Plugin tests can also use the external data artifact interface provided by Girder as described in
+:ref:`use_external_data`.  The artifact key files should be placed inside a directory
+called ``plugin_tests/data/``.  Tests which depend on these artifacts should be explicitly added
+using the ``EXTERNAL_DATA`` option, with arguments of data artifact names (without the hash file
+extension) prefixed by ``plugins/<plugin_name>``. For example:
 
 .. code-block:: cmake
 
     add_standard_plugin_tests(NO_SERVER_TESTS)
     add_python_test(cats_server_test PLUGIN cats EXTERNAL_DATA plugins/cats/test_file.txt)
 
-Then, within your test environment, the file will be available
+Then, within your test environment, the artifact will be available
 under the a location specified by the ``GIRDER_TEST_DATA_PREFIX`` environment variable, in the
-subdirectory ``plugins/<plugin_name>``. For example, in the same ``cats_server_test``, the file
-can be loaded at the path:
+subdirectory ``plugins/<plugin_name>``. For example, in the same ``cats_server_test``, the artifact
+file can be loaded at the path:
 
 .. code-block:: python
 

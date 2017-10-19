@@ -28,7 +28,6 @@ import HierarchyWidgetTemplate from 'girder/templates/widgets/hierarchyWidget.pu
 import 'girder/stylesheets/widgets/hierarchyWidget.styl';
 
 import 'bootstrap/js/dropdown';
-import 'bootstrap/js/tooltip';
 
 var pickedResources = null;
 
@@ -295,17 +294,6 @@ var HierarchyWidget = View.extend({
             }
         }
 
-        this.$('[title]').tooltip({
-            container: this.$el,
-            animation: false,
-            delay: {
-                show: 100
-            },
-            placement: function () {
-                return this.$element.attr('placement') || 'top';
-            }
-        });
-
         if (this.upload) {
             this.uploadDialog();
         } else if (this.folderAccess) {
@@ -538,9 +526,8 @@ var HierarchyWidget = View.extend({
                     public: this.parentModel.get('public'),
                     accessLevel: this.parentModel.getAccessLevel()
                 });
-            } else {
-                this._initFolderViewSubwidgets();
             }
+            this._initFolderViewSubwidgets();
         }
 
         this.render();
