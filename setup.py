@@ -82,7 +82,7 @@ extras_reqs = {
     'item_tasks': ['ctk-cli'],
     'ldap': ['pyldap'],
     'thumbnails': ['Pillow', 'pydicom', 'numpy'],
-    'worker': ['celery>=4.0.0', 'amqp==2.1.4']
+    'worker': ['celery[redis]>=4.0.0', 'amqp==2.1.4']
 }
 all_extra_reqs = itertools.chain.from_iterable(extras_reqs.values())
 extras_reqs['plugins'] = list(set(all_extra_reqs))
