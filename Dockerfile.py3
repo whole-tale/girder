@@ -1,4 +1,4 @@
-FROM node:6
+FROM node:6-stretch
 MAINTAINER Kitware, Inc. <kitware@kitware.com>
 
 EXPOSE 8080
@@ -11,15 +11,18 @@ RUN apt-get -qqy update && apt-get install -qy software-properties-common python
     build-essential \
     git \
     xsltproc \
+    python3-cairo \
+    python3-gi \
+    python3-gi-cairo \
     libffi-dev \
     libsasl2-dev \
     libssl-dev \
     libldap2-dev \
+    libpango1.0-dev \
     libpython3-dev && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN npm config set progress false
-RUN wget https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py
+RUN wget -q https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py
 
 WORKDIR /girder
 COPY girder /girder/girder
@@ -32,7 +35,17 @@ COPY setup.py /girder/setup.py
 COPY package.json /girder/package.json
 COPY README.rst /girder/README.rst
 
-RUN python3 -m pip install -e .[plugins,sftp]
-RUN girder-install web --all-plugins
+RUN python3 -m pip install --no-cache-dir -q \
+  -r plugins/wholetale/requirements.txt \
+  -r plugins/wt_sils/requirements.txt \
+  -e .[plugins,sftp]
+ENV NPM_CONFIG_LOGLEVEL=warn NPM_CONFIG_COLOR=false NPM_CONFIG_PROGRESS=false
+RUN girder-install web --all-plugins && \
+  rm -rf /root/.npm /tmp/npm* /girder/node_modules
+
+RUN python3 -c "import nltk; nltk.download('wordnet')"
+RUN python3 -m spacy download en
+
+COPY girder.local.cfg.dev /girder/girder/conf/girder.local.cfg
 
 ENTRYPOINT ["python3", "-m", "girder"]
