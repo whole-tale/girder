@@ -37,14 +37,13 @@ COPY README.rst /girder/README.rst
 
 RUN python3 -m pip install --no-cache-dir -q \
   -r plugins/wholetale/requirements.txt \
-  -r plugins/wt_sils/requirements.txt \
   -e .[plugins,sftp]
 ENV NPM_CONFIG_LOGLEVEL=warn NPM_CONFIG_COLOR=false NPM_CONFIG_PROGRESS=false
 RUN girder-install web --all-plugins && \
   rm -rf /root/.npm /tmp/npm* /girder/node_modules
 
-RUN python3 -c "import nltk; nltk.download('wordnet')"
-RUN python3 -m spacy download en
+#RUN python3 -c "import nltk; nltk.download('wordnet')"
+#RUN python3 -m spacy download en
 
 COPY girder.local.cfg.dev /girder/girder/conf/girder.local.cfg
 
