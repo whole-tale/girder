@@ -50,6 +50,7 @@ COPY README.rst /girder/README.rst
 RUN python3 -m pip install --no-cache-dir -q \
   -r plugins/wholetale/requirements.txt \
   -r plugins/wt_sils/requirements.txt \
+  -r plugins/wt_home_dir/requirements.txt \
   -e .[plugins,sftp]
 ENV NPM_CONFIG_LOGLEVEL=warn NPM_CONFIG_COLOR=false NPM_CONFIG_PROGRESS=false
 RUN girder-install web --all-plugins && \
