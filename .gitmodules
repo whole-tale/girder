@@ -8,3 +8,6 @@
 	path = plugins/wt_sils
 	url = https://github.com/whole-tale/wt_sils
 	branch = master
+[submodule "plugins/wt_home_dir"]
+	path = plugins/wt_home_dir
+	url = https://github.com/whole-tale/wt_home_dirs
