@@ -7,18 +7,16 @@ function(javascript_tests_init)
 
   add_test(
     NAME js_coverage_reset
-    COMMAND ${CMAKE_COMMAND} -E remove_directory "${PROJECT_SOURCE_DIR}/build/test/coverage/server_html"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${PROJECT_SOURCE_DIR}/build/test/coverage/web_temp"
   )
   add_test(
     NAME js_coverage_combine_report
-    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     COMMAND "${ISTANBUL_EXECUTABLE}"
             "report"
             "--config" "${PROJECT_SOURCE_DIR}/.istanbul.yml"
             "--root" "${PROJECT_SOURCE_DIR}/build/test/coverage/web_temp"
             "--include" "coverage*.json"
-            "--dir" "${PROJECT_SOURCE_DIR}/build/test/coverage/web"
-            "text-summary" "lcovonly" "cobertura" "html"
   )
   set_property(TEST js_coverage_reset PROPERTY LABELS girder_browser girder_integration)
   set_property(TEST js_coverage_combine_report PROPERTY LABELS girder_coverage)
@@ -112,6 +110,8 @@ function(add_web_client_test case specFile)
   # BASEURL (url): The base url to load for the test.
   # TEST_MODULE (python module path): Run this module rather than the default
   #     "tests.web_client_test"
+  # TEST_PYTHON_PATH: If specified, add this as the first element of the python
+  #     path when running the test module.
   # SETUP_MODULES: colon-separated list of python scripts to import at test setup time
   #     for side effects such as mocking, adding API routes, etc.
   # SETUP_DATABASE: An absolute path to a database initialization spec
@@ -124,8 +124,8 @@ function(add_web_client_test case specFile)
   set(testname "web_client_${case}")
 
   set(_options NOCOVERAGE)
-  set(_args PLUGIN ASSETSTORE WEBSECURITY BASEURL PLUGIN_DIR TIMEOUT TEST_MODULE REQUIRED_FILES
-            SETUP_MODULES ENVIRONMENT EXTERNAL_DATA SETUP_DATABASE)
+  set(_args PLUGIN ASSETSTORE WEBSECURITY BASEURL PLUGIN_DIR TIMEOUT TEST_MODULE TEST_PYTHONPATH
+            REQUIRED_FILES SETUP_MODULES ENVIRONMENT EXTERNAL_DATA SETUP_DATABASE)
   set(_multival_args RESOURCE_LOCKS ENABLEDPLUGINS)
   cmake_parse_arguments(fn "${_options}" "${_args}" "${_multival_args}" ${ARGN})
 
@@ -164,6 +164,12 @@ function(add_web_client_test case specFile)
     set(test_module "tests.web_client_test")
   endif()
 
+  if(fn_TEST_PYTHONPATH)
+    set(pythonpath "${fn_TEST_PYTHONPATH}:$ENV{PYTHONPATH}")
+  else()
+    set(pythonpath "$ENV{PYTHONPATH}")
+  endif()
+
   if(fn_EXTERNAL_DATA)
     set(_data_files "")
     foreach(_data_file ${fn_EXTERNAL_DATA})
@@ -194,7 +200,7 @@ function(add_web_client_test case specFile)
   string(REPLACE ";" " " plugins "${plugins}")
 
   set_property(TEST ${testname} PROPERTY ENVIRONMENT
-    "PYTHONPATH=$ENV{PYTHONPATH}"
+    "PYTHONPATH=${pythonpath}"
     "SPEC_FILE=${specFile}"
     "ASSETSTORE_TYPE=${assetstoreType}"
     "WEB_SECURITY=${webSecurity}"
