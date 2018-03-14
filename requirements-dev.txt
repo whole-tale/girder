@@ -12,5 +12,6 @@ pytest-cov
 pytest-xdist
 Sphinx
 sphinx_rtd_theme
+python-dateutil<2.7 # required for botocore=1.9.8
 tox
 virtualenv

@@ -72,7 +72,7 @@ installReqs = [
     'pymongo>=3.5',
     'PyYAML',
     'psutil',
-    'python-dateutil<2.7',
+    'python-dateutil<2.7',  # required for compatibility with botocore=1.9.8
     'pytz',
     'requests',
     'shutilwhich ; python_version < \'3.3\'',
