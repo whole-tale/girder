@@ -72,7 +72,7 @@ installReqs = [
     'pymongo>=3.5',
     'PyYAML',
     'psutil',
-    'python-dateutil',
+    'python-dateutil<2.7',
     'pytz',
     'requests',
     'shutilwhich ; python_version < \'3.3\'',
