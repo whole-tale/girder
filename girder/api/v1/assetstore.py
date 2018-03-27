@@ -118,10 +118,6 @@ class Assetstore(Resource):
                 name=name, bucket=bucket, prefix=prefix, secret=secret,
                 accessKeyId=accessKeyId, service=service, readOnly=readOnly, region=region,
                 inferCredentials=inferCredentials)
-        elif type == AssetstoreType.DIRECTFS:
-            self.requireParams({'root': root})
-            return self._model.createDirectFSAssetstore(
-                name=name, root=root, perms=perms)
         else:
             raise RestException('Invalid type parameter')
 

@@ -137,16 +137,6 @@ class Assetstore(Model):
             'perms': perms
         })
 
-    def createDirectFSAssetstore(self, name, root, perms=None):
-        return self.save({
-            'type': AssetstoreType.DIRECTFS,
-            'created': datetime.datetime.utcnow(),
-            'name': name,
-            'root': root,
-            'perms': perms
-        })
-
-
     def createGridFsAssetstore(self, name, db, mongohost=None,
                                replicaset=None, shard=None):
         return self.save({

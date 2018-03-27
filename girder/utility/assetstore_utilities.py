@@ -20,7 +20,6 @@
 from ..constants import AssetstoreType
 from ..exceptions import NoAssetstoreAdapter
 from .filesystem_assetstore_adapter import FilesystemAssetstoreAdapter
-from .directfs_assetstore_adapter import DirectFSAssetstoreAdapter
 from .gridfs_assetstore_adapter import GridFsAssetstoreAdapter
 from .s3_assetstore_adapter import S3AssetstoreAdapter
 
@@ -28,8 +27,7 @@ from .s3_assetstore_adapter import S3AssetstoreAdapter
 _assetstoreTable = {
     AssetstoreType.FILESYSTEM: FilesystemAssetstoreAdapter,
     AssetstoreType.GRIDFS: GridFsAssetstoreAdapter,
-    AssetstoreType.S3: S3AssetstoreAdapter,
-    AssetstoreType.DIRECTFS: DirectFSAssetstoreAdapter
+    AssetstoreType.S3: S3AssetstoreAdapter
 }
 
 
