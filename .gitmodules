@@ -4,3 +4,6 @@
 [submodule "plugins/wt_data_manager"]
 	path = plugins/wt_data_manager
 	url = https://github.com/whole-tale/girder_wt_data_manager
+[submodule "plugins/wt_home_dirs"]
+	path = plugins/wt_home_dirs
+	url = https://github.com/whole-tale/wt_home_dirs
