@@ -32,7 +32,8 @@ import unicodedata
 from . import docs
 from girder import events, logger, logprint
 from girder.constants import SettingKey, TokenScope, SortDir
-from girder.models.model_base import AccessException, GirderException, ValidationException
+from girder.exceptions import AccessException, GirderException, ValidationException, \
+    RestException
 from girder.models.setting import Setting
 from girder.models.token import Token
 from girder.models.user import User
@@ -711,21 +712,6 @@ def _setCommonCORSHeaders():
             setResponseHeader(key, origin)
 
 
-class RestException(Exception):
-    """
-    Throw a RestException in the case of any sort of incorrect
-    request (i.e. user/client error). Login and permission failures
-    should set a 403 code; almost all other validation errors
-    should use status 400, which is the default.
-    """
-    def __init__(self, message, code=400, extra=None):
-        self.code = code
-        self.extra = extra
-        self.message = message
-
-        Exception.__init__(self, message)
-
-
 class Resource(ModelImporter):
     """
     All REST resources should inherit from this class, which provides utilities
@@ -823,6 +809,8 @@ class Resource(ModelImporter):
         """
         Remove a route from the handler and documentation.
 
+        .. deprecated :: 2.3.0
+
         :param method: The HTTP method, e.g. 'GET', 'POST', 'PUT'
         :type method: str
         :param route: The route, as a list of path params relative to the
@@ -831,7 +819,6 @@ class Resource(ModelImporter):
         :type route: tuple[str]
         :param handler: The method called for the route; this is necessary to
                         remove the documentation.
-        .. deprecated :: 2.3.0
         :type handler: Function
         :param resource: the name of the resource at the root of this route.
         """
@@ -1087,9 +1074,14 @@ class Resource(ModelImporter):
         :param defaultSortDir: Sort direction.
         :type defaultSortDir: girder.constants.SortDir
         """
-        offset = int(params.get('offset', 0))
-        limit = int(params.get('limit', 50))
-        sortdir = int(params.get('sortdir', defaultSortDir))
+        try:
+            offset = int(params.get('offset', 0))
+            limit = int(params.get('limit', 50))
+            sortdir = int(params.get('sortdir', defaultSortDir))
+        except ValueError:
+            raise RestException('Invalid value for offset, limit, or sortdir parameter.')
+        if sortdir not in [SortDir.ASCENDING, SortDir.DESCENDING]:
+            raise RestException('Invalid value for sortdir parameter.')
 
         if 'sort' in params:
             sort = [(params['sort'].strip(), sortdir)]

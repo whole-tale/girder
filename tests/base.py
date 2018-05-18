@@ -87,6 +87,9 @@ def startServer(mock=True, mockS3=False):
         logHandler.setLevel(logging.DEBUG)
         cherrypy.log.error_log.addHandler(logHandler)
 
+    # Tell CherryPy to throw exceptions in request handling code
+    cherrypy.config.update({'request.throw_errors': True})
+
     mockSmtp.start()
     if mockS3:
         global mockS3Server
@@ -557,9 +560,7 @@ class TestCase(unittest.TestCase, model_importer.ModelImporter):
             body = self.getBody(response)
             try:
                 response.json = json.loads(body)
-            except Exception:
-                print(url)
-                print(body)
+            except ValueError:
                 raise AssertionError('Did not receive JSON response')
 
         if not exception and response.output_status.startswith(b'500'):
@@ -633,8 +634,7 @@ class TestCase(unittest.TestCase, model_importer.ModelImporter):
             body = self.getBody(response)
             try:
                 response.json = json.loads(body)
-            except Exception:
-                print(body)
+            except ValueError:
                 raise AssertionError('Did not receive JSON response')
 
         if response.output_status.startswith(b'500'):

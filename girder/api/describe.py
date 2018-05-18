@@ -30,8 +30,9 @@ import six
 import cherrypy
 
 from girder import constants, events, logprint
-from girder.api.rest import getCurrentUser, RestException, getBodyJson
-from girder.constants import CoreEventHandler, SettingKey
+from girder.api.rest import getCurrentUser, getBodyJson
+from girder.constants import CoreEventHandler, SettingKey, SortDir
+from girder.exceptions import RestException
 from girder.models.setting import Setting
 from girder.utility import config, toBool
 from girder.utility.model_importer import ModelImporter
@@ -359,7 +360,7 @@ class Description(object):
 
         return self
 
-    def pagingParams(self, defaultSort, defaultSortDir=1, defaultLimit=50):
+    def pagingParams(self, defaultSort, defaultSortDir=SortDir.ASCENDING, defaultLimit=50):
         """
         Adds the limit, offset, sort, and sortdir parameter documentation to
         this route handler.
@@ -381,7 +382,8 @@ class Description(object):
                 strip=True)
             self.param(
                 'sortdir', 'Sort order: 1 for ascending, -1 for descending.',
-                required=False, dataType='integer', enum=(1, -1), default=defaultSortDir)
+                required=False, dataType='integer', enum=[SortDir.ASCENDING, SortDir.DESCENDING],
+                default=defaultSortDir)
 
         self.hasPagingParams = True
         return self
