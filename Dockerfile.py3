@@ -58,15 +58,6 @@ RUN girder-install web --all-plugins && \
 
 RUN python3 -c "import nltk; nltk.download('wordnet')"
 
-# Workaround for spacy using -march=native
-RUN python3 -m pip uninstall -y spacy && \
-  cd /tmp && \
-  curl -JO https://pypi.python.org/packages/5a/0f/882d4b0ac4c0d109496f4b24c3150f17b058eb95be6dda7ef0d82ca2cc0f/spacy-2.0.3.tar.gz && \
-  tar xf spacy-2.0.3.tar.gz && \
-  rm spacy-2.0.3.tar.gz && \
-  cd spacy-2.0.3 && \
-  sed -e '/march/ s/native/x86-64/g' -i setup.py && \
-  pip install -e .
 RUN python3 -m spacy download en
 
 COPY girder.local.cfg.dev /girder/girder/conf/girder.local.cfg
