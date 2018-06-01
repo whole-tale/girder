@@ -62,4 +62,8 @@ RUN python3 -m spacy download en
 
 COPY girder.local.cfg.dev /girder/girder/conf/girder.local.cfg
 
+# Make girder-shell happy
+ENV LC_ALL=C.UTF-8 LANG=C.UTF-8
+RUN python3 -m pip install ipython
+
 ENTRYPOINT ["python3", "-m", "girder"]
