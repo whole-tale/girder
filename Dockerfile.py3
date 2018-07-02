@@ -66,4 +66,9 @@ COPY girder.local.cfg.dev /girder/girder/conf/girder.local.cfg
 ENV LC_ALL=C.UTF-8 LANG=C.UTF-8
 RUN python3 -m pip install ipython
 
+RUN python3 -m pip install pyOpenSSL[security]>=0.14
+RUN girder-worker-config set celery backend redis://redis/ && \
+  girder-worker-config set celery broker redis://redis/ && \
+  girder-worker-config set girder_worker tmp_root /tmp
+
 ENTRYPOINT ["python3", "-m", "girder"]
