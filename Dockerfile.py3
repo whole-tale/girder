@@ -71,4 +71,9 @@ RUN girder-worker-config set celery backend redis://redis/ && \
   girder-worker-config set celery broker redis://redis/ && \
   girder-worker-config set girder_worker tmp_root /tmp
 
+# Temporary fix for kombu
+RUN sed \
+  -e 's/return decode(data/&.decode("utf-8")/' \
+  -i /usr/local/lib/python3.5/dist-packages/kombu/serialization.py
+
 ENTRYPOINT ["python3", "-m", "girder"]
