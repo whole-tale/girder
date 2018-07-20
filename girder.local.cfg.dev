@@ -4,7 +4,7 @@ tools.proxy.on = True
 [database]
 uri = "mongodb://mongo1:27017,mongo2:27017,mongo3:27017/girder"
 replica_set = "rs1"
-readPreference = "secondaryPreferred"
+readPreference = "primaryPreferred"
 w = "majority"
 
 [server]
