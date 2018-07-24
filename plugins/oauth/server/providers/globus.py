@@ -29,7 +29,7 @@ from .. import constants
 class Globus(ProviderBase):
     _AUTH_URL = 'https://auth.globus.org/v2/oauth2/authorize'
     _AUTH_SCOPES = ['urn:globus:auth:scope:auth.globus.org:view_identities',
-                    'openid', 'profile', 'email']
+                    'openid', 'profile', 'email', 'urn:globus:auth:scope:transfer.api.globus.org:all']
     _TOKEN_URL = 'https://auth.globus.org/v2/oauth2/token'
     _API_USER_URL = 'https://auth.globus.org/v2/oauth2/userinfo'
 
@@ -50,7 +50,7 @@ class Globus(ProviderBase):
 
         query = urllib.parse.urlencode({
             'response_type': 'code',
-            'access_type': 'online',
+            'access_type': 'offline',
             'client_id': clientId,
             'redirect_uri': callbackUrl,
             'state': state,
@@ -97,4 +97,9 @@ class Globus(ProviderBase):
         firstName = name[0]
         lastName = name[-1]
 
-        return self._createOrReuseUser(oauthId, email, firstName, lastName)
+        user = self._createOrReuseUser(oauthId, email, firstName, lastName)
+        # save Globus token so that it can be used to access Globus services
+        user['otherTokens'] = token.get('other_tokens')
+        self.model('user').save(user)
+        return user
+
