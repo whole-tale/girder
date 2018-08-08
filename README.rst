@@ -1,5 +1,5 @@
-|logo| Girder |build-status| |docs-status| |license-badge| |gitter-badge| |codecov-badge|
-=========================================================================================
+|logo| Girder |license-badge|
+=============================
 
 **Data Management Platform**
 
@@ -17,28 +17,32 @@ For questions, comments, or to get in touch with the maintainers, head to our `D
 
 We'd love for you to `contribute to Girder <CONTRIBUTING.rst>`_.
 
+Triggering deployment on dev
+============================
+
+Make sure you have a local copy with submodule initialized:
+
+.. code::
+
+    git clone --recurse-submodules -j4 git@github.com:whole-tale/girder.git
+
+Steps to trigger a new build and a deployment @ ``.dev.wholetale.org``:
+
+.. code::
+
+    cd girder/plugins/wholetale  # or any other plugin that needs a bump
+    git pull origin master
+    cd ..
+    git commit -a -m "Bump plugin (whole-tale/girder-wholetale#12345)"
+    git push origin master
+
 .. |logo| image:: clients/web/static/img/Girder_Favicon.png
 
 .. |kitware-logo| image:: https://www.kitware.com/img/small_logo_over.png
     :target: https://kitware.com
     :alt: Kitware Logo
 
-.. |build-status| image:: https://circleci.com/gh/girder/girder.png?style=shield
-    :target: https://circleci.com/gh/girder/girder
-    :alt: Build Status
-
-.. |docs-status| image:: https://readthedocs.org/projects/girder/badge?version=latest
-    :target: https://girder.readthedocs.org
-    :alt: Documentation Status
-
 .. |license-badge| image:: docs/license.png
     :target: https://pypi.python.org/pypi/girder
     :alt: License
 
-.. |gitter-badge| image:: https://badges.gitter.im/Join Chat.svg
-    :target: https://gitter.im/girder/girder?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
-    :alt: Gitter Chat
-
-.. |codecov-badge| image:: https://img.shields.io/codecov/c/github/girder/girder.svg
-    :target: https://codecov.io/gh/girder/girder
-    :alt: Coverage Status
