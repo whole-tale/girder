@@ -8,7 +8,6 @@ import os
 import six
 import smtpd
 import socket
-import sys
 import threading
 import time
 
@@ -24,7 +23,7 @@ class MockSmtpServer(smtpd.SMTPServer):
 
     def __init__(self, localaddr, remoteaddr, decode_data=False):
         kwargs = {}
-        if sys.version_info >= (3, 5):
+        if six.PY3:
             # Python 3.5+ prints a warning if 'decode_data' isn't explicitly
             # specified, but earlier versions don't accept the argument at all
             kwargs['decode_data'] = decode_data
@@ -251,3 +250,44 @@ def buildHeaders(headers, cookie, user, token, basicAuth, authHeader):
         headers.append((authHeader, 'Basic %s' % auth.decode()))
 
     return headers
+
+
+def uploadFile(name, contents, user, parent, parentType='folder',
+               mimeType=None):
+    """
+    Upload a file.
+
+    :param name: The name of the file.
+    :type name: str
+    :param contents: The file contents
+    :type contents: str
+    :param user: The user performing the upload.
+    :type user: dict
+    :param parent: The parent document.
+    :type parent: dict
+    :param parentType: The type of the parent ("folder" or "item")
+    :type parentType: str
+    :param mimeType: Explicit MIME type to set on the file.
+    :type mimeType: str
+    :returns: The file that was created.
+    :rtype: dict
+    """
+    mimeType = mimeType or 'application/octet-stream'
+    upload = request(path='/file', method='POST', user=user,
+                     params={
+                         'parentType': parentType,
+                         'parentId': str(parent['_id']),
+                         'name': name,
+                         'size': len(contents),
+                         'mimeType': mimeType
+                     })
+
+    resp = request(path='/file/chunk', method='POST', user=user,
+                   body=contents,
+                   params={
+                       'uploadId': upload.json['_id'],
+                       'offset': 0
+                   },
+                   type='text/plain')
+
+    return resp.json

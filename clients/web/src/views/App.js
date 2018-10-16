@@ -39,6 +39,7 @@ var App = View.extend({
         this._started = false;
         settings = settings || {};
         this.contactEmail = settings.contactEmail || null;
+        this.privacyNoticeHref = settings.privacyNoticeHref || null;
         this.brandName = settings.brandName || null;
         this.bannerColor = settings.bannerColor || null;
         this.registrationPolicy = settings.registrationPolicy || null;
@@ -72,7 +73,7 @@ var App = View.extend({
         });
 
         // define a function to be run after fetching the user model
-        var afterFetch = _.bind(function (user) {
+        var afterFetch = (user) => {
             this._createLayout();
 
             if (user) {
@@ -92,7 +93,7 @@ var App = View.extend({
                     pushState: false
                 });
             }
-        }, this);
+        };
 
         // If fetching the user from the server then we return the jqxhr object
         // from the request, otherwise just call the callback.
@@ -140,7 +141,8 @@ var App = View.extend({
 
         this.footerView = new LayoutFooterView({
             parentView: this,
-            contactEmail: this.contactEmail
+            contactEmail: this.contactEmail,
+            privacyNoticeHref: this.privacyNoticeHref
         });
 
         this.progressListView = new ProgressListView({

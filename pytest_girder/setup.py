@@ -14,7 +14,8 @@ setup(
     install_requires=[
         'girder',
         'mongomock',
-        'pytest',
+        'pytest>=3.6',
+        'pytest-cov<2.6',
         'pymongo'
     ],
     entry_points={

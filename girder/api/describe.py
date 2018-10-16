@@ -19,19 +19,16 @@
 
 import bson.json_util
 import dateutil.parser
-try:
-    from inspect import signature, Parameter
-except ImportError:
-    from funcsigs import signature, Parameter
 import inspect
 import jsonschema
 import os
 import six
 import cherrypy
+from collections import OrderedDict
 
-from girder import constants, events, logprint
+from girder import constants, logprint
 from girder.api.rest import getCurrentUser, getBodyJson
-from girder.constants import CoreEventHandler, SettingKey, SortDir
+from girder.constants import SettingKey, SortDir
 from girder.exceptions import RestException
 from girder.models.setting import Setting
 from girder.utility import config, toBool
@@ -40,6 +37,11 @@ from girder.utility.webroot import WebrootBase
 from girder.utility.resource import _apiRouteMap
 from . import docs, access
 from .rest import Resource, getApiUrl, getUrlParts
+
+if six.PY3:
+    from inspect import signature, Parameter
+else:
+    from funcsigs import signature, Parameter
 
 """
 Whenever we add new return values or new options we should increment the
@@ -135,7 +137,17 @@ class Description(object):
             resp['consumes'] = self._consumes
 
         if self._produces:
-            resp['produces'] = self._produces
+            # swagger has a bug where not all appropriate mime types are
+            # considered to be binary (see
+            # https://github.com/swagger-api/swagger-ui/issues/1605).  If we
+            # have specified zip format, replace it with
+            # application/octet-stream
+            #   Reduce the list of produces values to unique values,
+            # maintaining the order.
+            produces = list(OrderedDict.fromkeys([
+                'application/octet-stream' if item in ('application/zip', )
+                else item for item in self._produces]))
+            resp['produces'] = produces
 
         if self._deprecated:
             resp['deprecated'] = True
@@ -458,24 +470,15 @@ class ApiDocs(WebrootBase):
         self.vars = {
             'apiRoot': '',
             'staticRoot': '',
-            'brandName': Setting().get(SettingKey.BRAND_NAME),
             'mode': mode
         }
 
-        events.bind('model.setting.save.after', CoreEventHandler.WEBROOT_SETTING_CHANGE,
-                    self._onSettingSave)
-        events.bind('model.setting.remove', CoreEventHandler.WEBROOT_SETTING_CHANGE,
-                    self._onSettingRemove)
-
-    def _onSettingSave(self, event):
-        settingDoc = event.info
-        if settingDoc['key'] == SettingKey.BRAND_NAME:
-            self.updateHtmlVars({'brandName': settingDoc['value']})
-
-    def _onSettingRemove(self, event):
-        settingDoc = event.info
-        if settingDoc['key'] == SettingKey.BRAND_NAME:
-            self.updateHtmlVars({'brandName': Setting().getDefault(SettingKey.BRAND_NAME)})
+    def _renderHTML(self):
+        from girder.utility import server
+        self.vars['apiRoot'] = server.getApiRoot()
+        self.vars['staticRoot'] = server.getApiStaticRoot()
+        self.vars['brandName'] = Setting().get(SettingKey.BRAND_NAME)
+        return super(ApiDocs, self)._renderHTML()
 
 
 class Describe(Resource):
@@ -554,6 +557,8 @@ class describeRoute(object):  # noqa: class name
         This returns a decorator to set the API documentation on a route
         handler. Pass the Description object (or None) that you want to use to
         describe this route. It should be used like the following example:
+
+        .. code-block:: python
 
             @describeRoute(
                 Description('Do something')
@@ -684,6 +689,8 @@ class autoDescribeRoute(describeRoute):  # noqa: class name
                         self._passArg(fun, kwargs, name, val)
                     else:
                         self._passArg(fun, kwargs, name, cherrypy.request.body)
+                elif descParam['in'] == 'header':
+                    continue  # For now, do nothing with header params
                 elif 'default' in descParam:
                     self._passArg(fun, kwargs, name, descParam['default'])
                 elif descParam['required']:
@@ -821,7 +828,7 @@ class autoDescribeRoute(describeRoute):  # noqa: class name
         elif type == 'number':
             value = self._handleNumber(name, descParam, value)
 
-        # Enum validation (should be afer type coercion)
+        # Enum validation (should be after type coercion)
         if 'enum' in descParam and value not in descParam['enum']:
             raise RestException('Invalid value for %s: "%s". Allowed values: %s.' % (
                 name, value, ', '.join(str(v) for v in descParam['enum'])))

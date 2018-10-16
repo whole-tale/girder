@@ -1,4 +1,4 @@
-FROM node:6-stretch
+FROM node:8-stretch
 MAINTAINER Kitware, Inc. <kitware@kitware.com>
 
 EXPOSE 8080
@@ -77,4 +77,9 @@ RUN sed \
   -e 's/return decode(data/&.decode("utf-8")/' \
   -i /usr/local/lib/python3.5/dist-packages/kombu/serialization.py
 
-ENTRYPOINT ["python3", "-m", "girder"]
+# See http://click.pocoo.org/5/python3/#python-3-surrogate-handling for more detail on
+# why this is necessary.
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
+
+ENTRYPOINT ["girder", "serve"]

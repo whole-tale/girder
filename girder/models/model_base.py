@@ -27,7 +27,7 @@ import six
 from bson.objectid import ObjectId
 from bson.errors import InvalidId
 from pymongo.errors import WriteError
-from girder import events, logprint, logger
+from girder import events, logprint, logger, auditLogger
 from girder.constants import AccessType, CoreEventHandler, ACCESS_FLAGS, TEXT_SCORE_SORT_MAX
 from girder.external.mongodb_proxy import MongoProxy
 from girder.models import getDbConnection
@@ -45,6 +45,44 @@ _allowedFindArgs = ('cursor_type', 'allow_partial_results', 'oplog_replay',
 _modelSingletons = []
 
 
+def _permissionClauses(user=None, level=None, prefix=''):
+    """
+    Given a user and access level, return a list of clauses that can be used as
+    part of a Mongo find query or aggregate match step.
+
+    :param user: The user to check policies against.
+    :type user: dict or None
+    :param level: The access level.  Explicitly passing None skips doing
+        permissions checks.
+    :type level: AccessType
+    :param prefix: an optional string to prepend to the keys used in the
+        clauses.
+    :type prefix: str
+    :returns: A query dictionary with an '$or' entry which consists of a list
+        of match clauses, any one of which implies validation.
+    """
+    permissionClauses = []
+    if level is None or (user and user['admin']):
+        # Without a level or with an admin user, match everything.
+        return {}
+    if level <= AccessType.READ:
+        permissionClauses.append({prefix + 'public': True})
+    elif not user:
+        # If we have no user and asked for higher than read access, make a
+        # query that will fail
+        return {'__matchnothing': 'nothing'}
+    if user and not user['admin']:
+        permissionClauses.extend([
+            {prefix + 'access.users': {'$elemMatch': {
+                'id': user['_id'],
+                'level': {'$gte': level}}}},
+            {prefix + 'access.groups': {'$elemMatch': {
+                'id': {'$in': user.get('groups', [])},
+                'level': {'$gte': level}}}},
+        ])
+    return {'$or': permissionClauses}
+
+
 class _ModelSingleton(type):
     def __init__(cls, name, bases, dict):
         super(_ModelSingleton, cls).__init__(name, bases, dict)
@@ -54,6 +92,10 @@ class _ModelSingleton(type):
         if cls._instance is None:
             cls._instance = super(_ModelSingleton, cls).__call__(*args, **kwargs)
             _modelSingletons.append(cls._instance)
+            # It is not safe to ever set cls._instance back to None in an attempt to force singleton
+            # recreation, since some models have event bindings that will not be destroyed (so the
+            # old singletons will still have instance-bound methods that are event-bound to and fire
+            # on model-related events)
         return cls._instance
 
 
@@ -90,6 +132,7 @@ class Model(ModelImporter):
         typically not have to call this method.
         """
         db_connection = getDbConnection()
+        self._dbserver_version = tuple(db_connection.server_info()['versionArray'])
         self.database = db_connection.get_database()
         self.collection = MongoProxy(self.database[self.name])
 
@@ -118,7 +161,7 @@ class Model(ModelImporter):
         :param level: The required access level for the field.
         :type level: AccessType
         :param fields: A field or list of fields to expose for that level.
-        :type fields: `str, list, or tuple`
+        :type fields: `str, list, set, or tuple`
         """
         if isinstance(fields, six.string_types):
             fields = (fields, )
@@ -135,7 +178,7 @@ class Model(ModelImporter):
         :param level: The access level to remove the fields from.
         :type level: AccessType
         :param fields: The field or fields to remove from the white list.
-        :type fields: `str, list, or tuple`
+        :type fields: `str, list, set, or tuple`
         """
         if isinstance(fields, six.string_types):
             fields = (fields, )
@@ -223,8 +266,8 @@ class Model(ModelImporter):
         :param doc: The document to validate before saving to the collection.
         :type doc: dict
         """
-        raise Exception('Must override validate() in %s model.'
-                        % self.__class__.__name__)  # pragma: no cover
+        raise NotImplementedError('Must override validate() in %s model.'
+                                  % self.__class__.__name__)
 
     def validateKeys(self, keys):
         """
@@ -251,8 +294,8 @@ class Model(ModelImporter):
         Subclasses should override this and set the name of the collection as
         self.name. Also, they should set any indexed fields that they require.
         """
-        raise Exception('Must override initialize() in %s model'
-                        % self.__class__.__name__)  # pragma: no cover
+        raise NotImplementedError('Must override initialize() in %s model'
+                                  % self.__class__.__name__)
 
     def find(self, query=None, offset=0, limit=0, timeout=None,
              fields=None, sort=None, **kwargs):
@@ -268,10 +311,12 @@ class Model(ModelImporter):
         :type limit: int
         :param timeout: Cursor timeout in ms. Default is no timeout.
         :type timeout: int
-        :param fields: A mask for filtering result documents by key, or None to return the full
-            document, passed to MongoDB find() as the `projection` param.
-        :type fields: `str, list of strings or tuple of strings for fields to be included from the
-            document, or dict for an inclusion or exclusion projection`.
+        :param fields: A mask for filtering result documents by key, or None to
+            return the full document, passed to MongoDB find() as the
+            `projection` param.  This is a string or iterable of strings to be
+            included from the document, or dict for an inclusion or exclusion
+            projection`.
+        :type fields: `str, list, set, or tuple`
         :param sort: The sort order.
         :type sort: List of (key, order) tuples.
         :returns: A pymongo database cursor.
@@ -295,10 +340,12 @@ class Model(ModelImporter):
 
         :param query: The search query (see general MongoDB docs for "find()")
         :type query: dict
-        :param fields: A mask for filtering result documents by key, or None to return the full
-            document, passed to MongoDB find() as the `projection` param.
-        :type fields: `str, list of strings or tuple of strings for fields to be included from the
-            document, or dict for an inclusion or exclusion projection`.
+        :param fields: A mask for filtering result documents by key, or None to
+            return the full document, passed to MongoDB find() as the
+            `projection` param.  This is a string or iterable of strings to be
+            included from the document, or dict for an inclusion or exclusion
+            projection`.
+        :type fields: `str, list, set, or tuple`
         :param sort: The sort order.
         :type sort: List of (key, order) tuples.
         :returns: the first object that was found, or None if none found.
@@ -306,6 +353,29 @@ class Model(ModelImporter):
         query = query or {}
         kwargs = {k: kwargs[k] for k in kwargs if k in _allowedFindArgs}
         return self.collection.find_one(query, projection=fields, **kwargs)
+
+    def _textSearchFilters(self, query, filters=None, fields=None):
+        """
+        Return a set of filters and fields used in the text search.
+
+        :param query: The text query. Will be stemmed internally.
+        :type query: str
+        :param filters: Any additional query operators to apply.
+        :type filters: dict
+        :param fields: A mask for filtering result documents by key, or None to
+            return the full document, passed to MongoDB find() as the
+            `projection` param.  This is a string or iterable of strings to be
+            included from the document, or dict for an inclusion or exclusion
+            projection`.
+        :type fields: `str, list, set, or tuple`
+        :returns: (filters, fields) to be passed to the query.
+        """
+        filters = filters or {}
+        fields = fields or {}
+
+        fields['_textScore'] = {'$meta': 'textScore'}
+        filters['$text'] = {'$search': query}
+        return filters, fields
 
     def textSearch(self, query, offset=0, limit=0, sort=None, fields=None,
                    filters=None, **kwargs):
@@ -320,20 +390,18 @@ class Model(ModelImporter):
         :type limit: int
         :param sort: The sort order.
         :type sort: List of (key, order) tuples.
-        :param fields: A mask for filtering result documents by key, or None to return the full
-            document, passed to MongoDB find() as the `projection` param.
-        :type fields: `str, list of strings or tuple of strings for fields to be included from the
-            document, or dict for an inclusion or exclusion projection`.
+        :param fields: A mask for filtering result documents by key, or None to
+            return the full document, passed to MongoDB find() as the
+            `projection` param.  This is a string or iterable of strings to be
+            included from the document, or dict for an inclusion or exclusion
+            projection`.
+        :type fields: `str, list, set, or tuple`
         :param filters: Any additional query operators to apply.
         :type filters: dict
         :returns: A pymongo cursor. It is left to the caller to build the
             results from the cursor.
         """
-        filters = filters or {}
-        fields = fields or {}
-
-        fields['_textScore'] = {'$meta': 'textScore'}
-        filters['$text'] = {'$search': query}
+        filters, fields = self._textSearchFilters(query, filters, fields)
 
         cursor = self.find(filters, offset=offset, limit=limit,
                            sort=sort, fields=fields)
@@ -341,10 +409,39 @@ class Model(ModelImporter):
         # Sort by meta text score, but only if result count is below a certain
         # threshold. The text score is not a real index, so we cannot always
         # sort by it if there is a high number of matching documents.
-        if cursor.count() < TEXT_SCORE_SORT_MAX and sort is None:
+        if sort is None and cursor.count() < TEXT_SCORE_SORT_MAX:
             cursor.sort([('_textScore', {'$meta': 'textScore'})])
 
         return cursor
+
+    def _prefixSearchFilters(self, query, filters=None, prefixSearchFields=None):
+        """
+        Return a set of filters and fields used in the text search.
+
+        :param query: The text query. Will be stemmed internally.
+        :type query: str
+        :param filters: Any additional query operators to apply.
+        :type filters: dict
+        :param prefixSearchFields: To override the model's prefixSearchFields
+            attribute for this invocation, pass an alternate iterable.
+        :returns: filters to be passed to the query.
+        """
+        filters = filters or {}
+        filters['$or'] = filters.get('$or', [])
+
+        for field in (prefixSearchFields or self.prefixSearchFields):
+            if isinstance(field, (list, tuple)):
+                filters['$or'].append({
+                    field[0]: {
+                        '$regex': '^%s' % re.escape(query),
+                        '$options': field[1]
+                    }
+                })
+            else:
+                filters['$or'].append({
+                    field: {'$regex': '^%s' % re.escape(query)}
+                })
+        return filters
 
     def prefixSearch(self, query, offset=0, limit=0, sort=None, fields=None,
                      filters=None, prefixSearchFields=None, **kwargs):
@@ -365,10 +462,12 @@ class Model(ModelImporter):
         :type limit: int
         :param sort: The sort order.
         :type sort: List of (key, order) tuples.
-        :param fields: A mask for filtering result documents by key, or None to return the full
-            document, passed to MongoDB find() as the `projection` param.
-        :type fields: `str, list of strings or tuple of strings for fields to be included from the
-            document, or dict for an inclusion or exclusion projection`.
+        :param fields: A mask for filtering result documents by key, or None to
+            return the full document, passed to MongoDB find() as the
+            `projection` param.  This is a string or iterable of strings to be
+            included from the document, or dict for an inclusion or exclusion
+            projection`.
+        :type fields: `str, list, set, or tuple`
         :param filters: Any additional query operators to apply.
         :type filters: dict
         :param prefixSearchFields: To override the model's prefixSearchFields
@@ -376,21 +475,7 @@ class Model(ModelImporter):
         :returns: A pymongo cursor. It is left to the caller to build the
             results from the cursor.
         """
-        filters = filters or {}
-        filters['$or'] = filters.get('$or', [])
-
-        for field in (prefixSearchFields or self.prefixSearchFields):
-            if isinstance(field, (list, tuple)):
-                filters['$or'].append({
-                    field[0]: {
-                        '$regex': '^%s' % re.escape(query),
-                        '$options': field[1]
-                    }
-                })
-            else:
-                filters['$or'].append({
-                    field: {'$regex': '^%s' % re.escape(query)}
-                })
+        filters = self._prefixSearchFilters(query, filters, prefixSearchFields)
 
         return self.find(
             filters, offset=offset, limit=limit, sort=sort, fields=fields)
@@ -435,6 +520,12 @@ class Model(ModelImporter):
 
         if triggerEvents:
             if isNew:
+                auditLogger.info('document.create', extra={
+                    'details': {
+                        'collection': self.name,
+                        'id': document['_id']
+                    }
+                })
                 events.trigger('model.%s.save.created' % self.name, document)
             events.trigger('model.%s.save.after' % self.name, document)
 
@@ -522,10 +613,12 @@ class Model(ModelImporter):
         :type id: string or ObjectId
         :param objectId: Whether the id should be coerced to ObjectId type.
         :type objectId: bool
-        :param fields: A mask for filtering result documents by key, or None to return the full
-            document, passed to MongoDB find() as the `projection` param.
-        :type fields: `str, list of strings or tuple of strings for fields to be included from the
-            document, or dict for an inclusion or exclusion projection`.
+        :param fields: A mask for filtering result documents by key, or None to
+            return the full document, passed to MongoDB find() as the
+            `projection` param.  This is a string or iterable of strings to be
+            included from the document, or dict for an inclusion or exclusion
+            projection`.
+        :type fields: `str, list, set, or tuple`
         :param exc: Whether to raise a ValidationException if there is no
                     document with the given id.
         :type exc: bool
@@ -1378,9 +1471,8 @@ class AccessControlledModel(Model):
         :param sort: The sort order
         :type sort: List of (key, order) tuples
         """
-        cursor = self.find({}, sort=sort)
-        return self.filterResultsByPermission(
-            cursor=cursor, user=user, level=AccessType.READ, limit=limit,
+        return self.findWithPermissions(
+            {}, sort=sort, user=user, level=AccessType.READ, limit=limit,
             offset=offset)
 
     def copyAccessPolicies(self, src, dest, save=False):
@@ -1458,19 +1550,28 @@ class AccessControlledModel(Model):
         :type offset: int
         :param sort: The sort order
         :type sort: List of (key, order) tuples
-        :param fields: A mask for filtering result documents by key, or None to return the full
-            document, passed to MongoDB find() as the `projection` param.
-        :type fields: `str, list of strings or tuple of strings for fields to be included from the
-            document, or dict for an inclusion or exclusion projection`.
+        :param fields: A mask for filtering result documents by key, or None to
+            return the full document, passed to MongoDB find() as the
+            `projection` param.  This is a string or iterable of strings to be
+            included from the document, or dict for an inclusion or exclusion
+            projection`.
+        :type fields: `str, list, set, or tuple`
         :param level: The access level to require.
         :type level: girder.constants.AccessType
         """
-        filters = filters or {}
+        filters, fields = self._textSearchFilters(query, filters, fields)
 
-        cursor = Model.textSearch(
-            self, query=query, filters=filters, sort=sort, fields=fields)
-        return self.filterResultsByPermission(
-            cursor, user=user, level=level, limit=limit, offset=offset)
+        cursor = self.findWithPermissions(
+            filters, offset=offset, limit=limit, sort=sort, fields=fields,
+            user=user, level=level)
+
+        # Sort by meta text score, but only if result count is below a certain
+        # threshold. The text score is not a real index, so we cannot always
+        # sort by it if there is a high number of matching documents.
+        if sort is None and cursor.count() < TEXT_SCORE_SORT_MAX:
+            cursor.sort([('_textScore', {'$meta': 'textScore'})])
+
+        return cursor
 
     def prefixSearch(self, query, user=None, filters=None, limit=0, offset=0,
                      sort=None, fields=None, level=AccessType.READ, prefixSearchFields=None):
@@ -1490,10 +1591,12 @@ class AccessControlledModel(Model):
         :type offset: int
         :param sort: The sort order.
         :type sort: List of (key, order) tuples.
-        :param fields: A mask for filtering result documents by key, or None to return the full
-            document, passed to MongoDB find() as the `projection` param.
-        :type fields: `str, list of strings or tuple of strings for fields to be included from the
-            document, or dict for an inclusion or exclusion projection`.
+        :param fields: A mask for filtering result documents by key, or None to
+            return the full document, passed to MongoDB find() as the
+            `projection` param.  This is a string or iterable of strings to be
+            included from the document, or dict for an inclusion or exclusion
+            projection`.
+        :type fields: `str, list, set, or tuple`
         :param level: The access level to require.
         :type level: girder.constants.AccessType
         :param prefixSearchFields: To override the model's prefixSearchFields
@@ -1501,10 +1604,49 @@ class AccessControlledModel(Model):
         :returns: A pymongo cursor. It is left to the caller to build the
             results from the cursor.
         """
-        filters = filters or {}
+        filters = self._prefixSearchFilters(query, filters, prefixSearchFields)
 
-        cursor = Model.prefixSearch(
-            self, query, filters=filters, sort=sort, fields=fields,
-            prefixSearchFields=prefixSearchFields)
-        return self.filterResultsByPermission(
-            cursor, user=user, level=level, limit=limit, offset=offset)
+        return self.findWithPermissions(
+            filters, offset=offset, limit=limit, sort=sort, fields=fields,
+            user=user, level=level)
+
+    def permissionClauses(self, user=None, level=None, prefix=''):
+        return _permissionClauses(user, level, prefix)
+
+    def findWithPermissions(self, query=None, offset=0, limit=0, timeout=None, fields=None,
+                            sort=None, user=None, level=AccessType.READ, **kwargs):
+        """
+        Search the collection by a set of parameters, only returning results
+        that the combined user and level have permission to access. Passes any
+        extra kwargs through to the underlying pymongo.collection.find
+        function.
+
+        :param query: The search query (see general MongoDB docs for "find()")
+        :type query: dict
+        :param offset: The offset into the results
+        :type offset: int
+        :param limit: Maximum number of documents to return
+        :type limit: int
+        :param timeout: Cursor timeout in ms. Default is no timeout.
+        :type timeout: int
+        :param fields: A mask for filtering result documents by key, or None to
+            return the full document, passed to MongoDB find() as the
+            `projection` param.  This is a string or iterable of strings to be
+            included from the document, or dict for an inclusion or exclusion
+            projection`.
+        :type fields: `str, list, set, or tuple`
+        :param sort: The sort order.
+        :type sort: List of (key, order) tuples.
+        :param user: The user to check policies against.
+        :type user: dict or None
+        :param level: The access level.  Explicitly passing None skips doing
+            permissions checks.
+        :type level: AccessType
+        :returns: A pymongo Cursor or CommandCursor.  If a CommandCursor, it
+            has been augmented with a count function.
+        """
+        if level is not None and (not user or not user['admin']):
+            query = {'$and': [query or {}, self.permissionClauses(user, level)]}
+        return self.find(
+            query=query, offset=offset, limit=limit, timeout=timeout,
+            fields=fields, sort=sort, **kwargs)

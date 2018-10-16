@@ -38,12 +38,19 @@ var SystemConfigurationView = View.extend({
                             return [$(el).data('webrootName'), $(el).val()];
                         }))
                     };
-                } else if (_.contains(['core.api_keys', 'core.enable_password_login'], key)) {  // booleans via checkboxes
+                } else if (_.contains(
+                    [
+                        'core.api_keys',
+                        'core.enable_password_login',
+                        'core.enable_notification_stream'
+                    ],
+                    key
+                )) { // booleans via checkboxes
                     return {
                         key,
                         value: element.is(':checked')
                     };
-                } else {  // all other settings use $.fn.val()
+                } else { // all other settings use $.fn.val()
                     return {
                         key,
                         value: element.val() || null
@@ -58,7 +65,7 @@ var SystemConfigurationView = View.extend({
                     list: JSON.stringify(settings)
                 },
                 error: null
-            }).done(_.bind(function () {
+            }).done(() => {
                 this.$('.g-submit-settings').girderEnable(true);
                 events.trigger('g:alert', {
                     icon: 'ok',
@@ -66,10 +73,10 @@ var SystemConfigurationView = View.extend({
                     type: 'success',
                     timeout: 4000
                 });
-            }, this)).fail(_.bind(function (resp) {
+            }).fail((resp) => {
                 this.$('.g-submit-settings').girderEnable(true);
                 this.$('#g-settings-error-message').text(resp.responseJSON.message);
-            }, this));
+            });
         },
         'click #g-restart-server': restartServerPrompt,
         'click #g-core-banner-default-color': function () {
@@ -85,6 +92,7 @@ var SystemConfigurationView = View.extend({
             'core.contact_email_address',
             'core.brand_name',
             'core.banner_color',
+            'core.privacy_notice',
             'core.cookie_lifetime',
             'core.enable_password_login',
             'core.email_from_address',
@@ -98,6 +106,7 @@ var SystemConfigurationView = View.extend({
             'core.smtp.username',
             'core.smtp.password',
             'core.upload_minimum_chunk_size',
+            'core.enable_notification_stream',
             'core.cors.allow_origin',
             'core.cors.allow_methods',
             'core.cors.allow_headers',
@@ -114,7 +123,7 @@ var SystemConfigurationView = View.extend({
                 list: JSON.stringify(keys),
                 default: 'none'
             }
-        }).done(_.bind(function (resp) {
+        }).done((resp) => {
             this.settings = resp;
             restRequest({
                 url: 'system/setting',
@@ -123,11 +132,11 @@ var SystemConfigurationView = View.extend({
                     list: JSON.stringify(keys),
                     default: 'default'
                 }
-            }).done(_.bind(function (resp) {
+            }).done((resp) => {
                 this.defaults = resp;
                 this.render();
-            }, this));
-        }, this));
+            });
+        });
     },
 
     render: function () {
@@ -135,11 +144,10 @@ var SystemConfigurationView = View.extend({
             settings: this.settings,
             defaults: this.defaults,
             routes: this.settings['core.route_table'] || this.defaults['core.route_table'],
-            routeKeys: _.sortBy(_.keys(this.settings['core.route_table'] ||
-                                       this.defaults['core.route_table']),
-                                function (a) {
-                                    return a.indexOf('core_') === 0 ? -1 : 0;
-                                }),
+            routeKeys: _.sortBy(
+                _.keys(this.settings['core.route_table'] || this.defaults['core.route_table']),
+                (a) => a.indexOf('core_') === 0 ? -1 : 0
+            ),
             JSON: window.JSON
         }));
 

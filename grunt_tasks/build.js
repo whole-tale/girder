@@ -22,6 +22,7 @@ const extendify = require('extendify');
 const webpack = require('webpack');
 const ExtractTextPlugin = require('extract-text-webpack-plugin');
 const GoogleFontsPlugin = require('google-fonts-webpack-plugin');
+const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
 
 const isTrue = (str) => !!str && !['false', 'off', '0'].includes(str.toString().toLowerCase());
 
@@ -109,17 +110,23 @@ module.exports = function (grunt) {
                     minimize: true,
                     debug: false
                 }),
-                new webpack.optimize.UglifyJsPlugin({
-                    compress: {
-                        warnings: false
-                    },
-                    output: {
-                        comments: false
+                new UglifyJsPlugin({
+                    uglifyOptions: {
+                        ecma: 6
                     }
                 })
             ]
         });
     }
+
+    // Define global constants
+    updateWebpackConfig({
+        plugins: [
+            new webpack.DefinePlugin({
+                'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV)
+            })
+        ]
+    });
 
     // Add extra config options for grunt-webpack
     updateWebpackConfig({

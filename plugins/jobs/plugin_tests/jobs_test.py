@@ -19,6 +19,7 @@
 
 import json
 import time
+from bson import json_util
 
 from tests import base
 from girder import events
@@ -87,6 +88,10 @@ class JobsTestCase(base.TestCase):
         self.assertStatus(resp, 403)
         resp = self.request(path, user=self.users[2], method='DELETE')
         self.assertStatus(resp, 403)
+
+        # If no user is specified, we should get a 401 error
+        resp = self.request(path, user=None)
+        self.assertStatus(resp, 401)
 
         # Make sure user who created the job can see it
         resp = self.request(path, user=self.users[1])
@@ -598,3 +603,16 @@ class JobsTestCase(base.TestCase):
             self.jobModel.updateJob(job, status=JobStatus.RUNNING)
         with self.assertRaises(ValidationException):
             self.jobModel.updateJob(job, status=JobStatus.INACTIVE)
+
+    def testJobSaveEventModification(self):
+        def customSave(event):
+            kwargs = json_util.loads(event.info['kwargs'])
+            kwargs['key2'] = 'newvalue'
+            event.info['kwargs'] = json_util.dumps(kwargs)
+
+        job = self.jobModel.createJob(title='A job', type='t', user=self.users[1], public=True)
+
+        job['kwargs'] = {'key1': 'value1', 'key2': 'value2'}
+        with events.bound('model.job.save', 'test', customSave):
+            job = self.jobModel.save(job)
+            self.assertEqual(job['kwargs']['key2'], 'newvalue')

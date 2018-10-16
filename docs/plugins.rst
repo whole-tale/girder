@@ -676,3 +676,4 @@ The Vega plugin uses the `Vega library <http://trifacta.github.io/vega>`_ to ren
 JSON objects directly in the Girder application. To use it, simply upload the JSON file as an item,
 and then set a "vega: true" metadata field on the item. The visualization will then be rendered
 directly in the item view.
+

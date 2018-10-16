@@ -1,7 +1,5 @@
 /* eslint-disable import/first */
 
-import _ from 'underscore';
-
 import router from 'girder/router';
 import events from 'girder/events';
 import eventStream from 'girder/utilities/EventStream';
@@ -148,25 +146,16 @@ router.route('useraccount/:id/:tab', 'accountTab', function (id, tab) {
     UserAccountView.fetchAndInit(id, tab);
 });
 router.route('useraccount/:id/token/:token', 'accountToken', function (id, token) {
-    restRequest({
-        url: `user/password/temporary/${id}`,
-        method: 'GET',
-        data: {token: token},
-        error: null
-    }).done(_.bind(function (resp) {
-        resp.user.token = resp.authToken.token;
-        eventStream.close();
-        setCurrentUser(new UserModel(resp.user));
-        eventStream.open();
-        events.trigger('g:login-changed');
-        events.trigger('g:navigateTo', UserAccountView, {
-            user: getCurrentUser(),
-            tab: 'password',
-            temporary: token
+    UserModel.fromTemporaryToken(id, token)
+        .done(() => {
+            events.trigger('g:navigateTo', UserAccountView, {
+                user: getCurrentUser(),
+                tab: 'password',
+                temporary: token
+            });
+        }).fail(() => {
+            router.navigate('users', {trigger: true});
         });
-    }, this)).fail(_.bind(function () {
-        router.navigate('users', {trigger: true});
-    }, this));
 });
 
 router.route('useraccount/:id/verification/:token', 'accountVerify', function (id, token) {
@@ -175,7 +164,7 @@ router.route('useraccount/:id/verification/:token', 'accountVerify', function (i
         method: 'PUT',
         data: {token: token},
         error: null
-    }).done(_.bind(function (resp) {
+    }).done((resp) => {
         if (resp.authToken) {
             resp.user.token = resp.authToken.token;
             eventStream.close();
@@ -190,7 +179,7 @@ router.route('useraccount/:id/verification/:token', 'accountVerify', function (i
             type: 'success',
             timeout: 4000
         });
-    }, this)).fail(_.bind(function () {
+    }).fail(() => {
         events.trigger('g:navigateTo', FrontPageView);
         events.trigger('g:alert', {
             icon: 'cancel',
@@ -198,7 +187,7 @@ router.route('useraccount/:id/verification/:token', 'accountVerify', function (i
             type: 'danger',
             timeout: 4000
         });
-    }, this));
+    });
 });
 
 /**
@@ -227,5 +216,16 @@ router.route('user/:id/folder/:id', 'userFolder', function (userId, folderId, pa
         folderCreate: params.dialog === 'foldercreate',
         folderEdit: params.dialog === 'folderedit',
         itemCreate: params.dialog === 'itemcreate'
+    });
+});
+
+/**
+ * SearchResults
+ */
+import SearchResultsView from 'girder/views/body/SearchResultsView';
+router.route('search/results', 'SearchResults', function (params) {
+    events.trigger('g:navigateTo', SearchResultsView, {
+        query: params.query,
+        mode: params.mode
     });
 });
