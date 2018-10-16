@@ -18,7 +18,6 @@
 ###############################################################################
 
 import cherrypy
-import functools
 import mako
 import mimetypes
 import os
@@ -26,7 +25,7 @@ import posixpath
 import six
 
 import girder.events
-from girder import constants, logprint, __version__, logStdoutStderr
+from girder import constants, logprint, __version__, logStdoutStderr, _setupCache
 from girder.models.setting import Setting
 from girder.utility import plugin_utilities, config
 from . import webroot
@@ -43,23 +42,37 @@ def _errorDefault(status, message, *args, **kwargs):
     return mako.template.Template(_errorTemplate).render(status=status, message=message)
 
 
-def _configureStaticRoutes(webroot, plugins, event=None):
-    """
-    Configures static routes for a given webroot.
+def getPlugins():
+    plugins = Setting().get(constants.SettingKey.PLUGINS_ENABLED, default=())
+    return plugin_utilities.getToposortedPlugins(plugins, ignoreMissing=True)
 
-    This function is also run when the route table setting is modified
-    to allow for dynamically changing static routes at runtime.
-    """
-    # This was triggered by some unrelated setting changing
-    if event is not None and event.info['key'] != constants.SettingKey.ROUTE_TABLE:
-        return
 
+def getApiRoot():
+    return config.getConfig()['server']['api_root']
+
+
+def getStaticRoot():
     routeTable = loadRouteTable()
 
     # If the static route is a URL, leave it alone
     if '://' in routeTable[constants.GIRDER_STATIC_ROUTE_ID]:
-        apiStaticRoot = routeTable[constants.GIRDER_STATIC_ROUTE_ID]
-        staticRoot = routeTable[constants.GIRDER_STATIC_ROUTE_ID]
+        return routeTable[constants.GIRDER_STATIC_ROUTE_ID]
+    else:
+        # Make the staticRoot relative to the api_root, if possible.  The api_root
+        # could be relative or absolute, but it needs to be in an absolute form for
+        # relpath to behave as expected.  We always expect the api_root to
+        # contain at least two components, but the reference from static needs to
+        # be from only the first component.
+        return posixpath.relpath(routeTable[constants.GIRDER_STATIC_ROUTE_ID],
+                                 routeTable[constants.GIRDER_ROUTE_ID])
+
+
+def getApiStaticRoot():
+    routeTable = loadRouteTable()
+
+    # If the static route is a URL, leave it alone
+    if '://' in routeTable[constants.GIRDER_STATIC_ROUTE_ID]:
+        return routeTable[constants.GIRDER_STATIC_ROUTE_ID]
     else:
         # Make the staticRoot relative to the api_root, if possible.  The api_root
         # could be relative or absolute, but it needs to be in an absolute form for
@@ -68,21 +81,8 @@ def _configureStaticRoutes(webroot, plugins, event=None):
         # be from only the first component.
         apiRootBase = posixpath.split(posixpath.join('/',
                                                      config.getConfig()['server']['api_root']))[0]
-        apiStaticRoot = posixpath.relpath(routeTable[constants.GIRDER_STATIC_ROUTE_ID],
-                                          apiRootBase)
-        staticRoot = posixpath.relpath(routeTable[constants.GIRDER_STATIC_ROUTE_ID],
-                                       routeTable[constants.GIRDER_ROUTE_ID])
-
-    webroot.updateHtmlVars({
-        'apiRoot': config.getConfig()['server']['api_root'],
-        'staticRoot': staticRoot,
-        'plugins': plugins
-    })
-
-    webroot.api.v1.updateHtmlVars({
-        'apiRoot': config.getConfig()['server']['api_root'],
-        'staticRoot': apiStaticRoot
-    })
+        return posixpath.relpath(routeTable[constants.GIRDER_STATIC_ROUTE_ID],
+                                 apiRootBase)
 
 
 def configureServer(test=False, plugins=None, curConfig=None):
@@ -93,8 +93,8 @@ def configureServer(test=False, plugins=None, curConfig=None):
     :param test: Set to True when running in the tests.
     :type test: bool
     :param plugins: If you wish to start the server with a custom set of
-                    plugins, pass this as a list of plugins to load. Otherwise,
-                    will use the PLUGINS_ENABLED setting value from the db.
+        plugins, pass this as a list of plugins to load. Otherwise,
+        will use the PLUGINS_ENABLED setting value from the db.
     :param curConfig: The configuration dictionary to update.
     """
     if curConfig is None:
@@ -153,6 +153,8 @@ def configureServer(test=False, plugins=None, curConfig=None):
     logprint.info('Running in mode: ' + mode)
     cherrypy.config['engine.autoreload.on'] = mode == 'development'
 
+    _setupCache()
+
     # Don't import this until after the configs have been read; some module
     # initialization code requires the configuration to be set up.
     from girder.api import api_main
@@ -160,18 +162,14 @@ def configureServer(test=False, plugins=None, curConfig=None):
     root = webroot.Webroot()
     api_main.addApiToNode(root)
 
+    girder.events.setupDaemon()
     cherrypy.engine.subscribe('start', girder.events.daemon.start)
     cherrypy.engine.subscribe('stop', girder.events.daemon.stop)
 
     if plugins is None:
-        plugins = Setting().get(constants.SettingKey.PLUGINS_ENABLED, default=())
-
-    plugins = list(plugin_utilities.getToposortedPlugins(plugins, ignoreMissing=True))
-
-    _configureStaticRoutes(root, plugins)
-
-    girder.events.bind('model.setting.save.after', '_updateStaticRoutesIfModified',
-                       functools.partial(_configureStaticRoutes, root, plugins))
+        plugins = getPlugins()
+    else:
+        plugins = plugin_utilities.getToposortedPlugins(plugins, ignoreMissing=True)
 
     root, appconf, _ = plugin_utilities.loadPlugins(
         plugins, root, appconf, root.api.v1, buildDag=False)
@@ -230,8 +228,8 @@ def setup(test=False, plugins=None, curConfig=None):
     routeTable = loadRouteTable(reconcileRoutes=True)
 
     # Mount Girder
-    application = cherrypy.tree.mount(girderWebroot,
-                                      str(routeTable[constants.GIRDER_ROUTE_ID]), appconf)
+    application = cherrypy.tree.mount(
+        girderWebroot, str(routeTable[constants.GIRDER_ROUTE_ID]), appconf)
 
     # Mount static files
     cherrypy.tree.mount(None, routeTable[constants.GIRDER_STATIC_ROUTE_ID],
@@ -248,7 +246,7 @@ def setup(test=False, plugins=None, curConfig=None):
     cherrypy.tree.mount(girderWebroot.api, '/api', appconf)
 
     # Mount everything else in the routeTable
-    for (name, route) in six.viewitems(routeTable):
+    for name, route in six.viewitems(routeTable):
         if name != constants.GIRDER_ROUTE_ID and name in pluginWebroots:
             cherrypy.tree.mount(pluginWebroots[name], route, appconf)
 
@@ -266,8 +264,7 @@ class _StaticFileRoute(object):
         self.contentType = contentType
 
     def GET(self):
-        return cherrypy.lib.static.serve_file(self.path,
-                                              content_type=self.contentType)
+        return cherrypy.lib.static.serve_file(self.path, content_type=self.contentType)
 
 
 def staticFile(path, contentType=None):

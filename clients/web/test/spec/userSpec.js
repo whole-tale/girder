@@ -7,11 +7,11 @@ describe('Create an admin and non-admin user', function () {
 
     it('register a user (first is admin)',
         girderTest.createUser('admin',
-                              'admin@email.com',
-                              'Admin',
-                              'Admin',
-                              'adminpassword!',
-                              registeredUsers));
+            'admin@email.com',
+            'Admin',
+            'Admin',
+            'adminpassword!',
+            registeredUsers));
 
     it('create user as admin using dialog', function () {
         girderTest.goToUsersPage()();
@@ -45,11 +45,11 @@ describe('Create an admin and non-admin user', function () {
 
     it('register another user',
         girderTest.createUser('nonadmin',
-                              'nonadmin@email.com',
-                              'Not',
-                              'Admin',
-                              'password!',
-                              registeredUsers));
+            'nonadmin@email.com',
+            'Not',
+            'Admin',
+            'password!',
+            registeredUsers));
 
     it('view the users on the user page and click on one', function () {
         girderTest.goToUsersPage()();
@@ -127,7 +127,7 @@ describe('Create an admin and non-admin user', function () {
     it('test changing other user\'s password', function () {
         runs(function () {
             girder.router.navigate('useraccount/' + registeredUsers[1].id + '/password',
-                                   {trigger: true});
+                {trigger: true});
         });
 
         waitsFor(function () {
@@ -362,6 +362,29 @@ describe('test the API key management tab', function () {
     });
 });
 
+describe('test the API key management tab', function () {
+    it('go to the two-factor authentication tab', function () {
+        runs(function () {
+            $('.g-account-tabs li>a[name="otp"]').click();
+        });
+        waitsFor(function () {
+            return $('.g-account-otp-info-text').length > 0;
+        }, 'tab to display');
+    });
+
+    it('begin activation of 2FA', function () {
+        runs(function () {
+            $('#g-user-otp-initialize-enable').click();
+        });
+        waitsFor(function () {
+            return $('.g-account-otp-enter-manual').length > 0;
+        }, 'OTP key parameters to display');
+    });
+
+    // Further client testing requires a Javascript TOTP implementation, which is too difficult to provide in the
+    // current testing environment
+});
+
 describe('test email verification', function () {
     it('Turn on email verification', function () {
         girderTest.logout()();
@@ -452,7 +475,7 @@ describe('test account approval', function () {
         }, 'dialog rest requests to finish');
         runs(function () {
             girder.router.navigate('user/' + registeredUsers[1].id,
-                                   {trigger: true});
+                {trigger: true});
         });
         waitsFor(function () {
             return $('.g-disable-user').length > 0;

@@ -301,6 +301,21 @@ class UserTestCase(base.TestCase):
         self._verifyUserDocument(resp.json)
         self.assertEqual(resp.json['admin'], True)
 
+        # test removal of admin flag
+        user = User().load(user['_id'], force=True)
+        self.assertEqual(user['admin'], True)
+        params = {
+            'email': 'valid@email.com',
+            'firstName': 'NewFirst ',
+            'lastName': ' New Last ',
+            'admin': 'false'
+        }
+        resp = self.request(path='/user/%s' % user['_id'], method='PUT',
+                            user=user, params=params)
+        self.assertStatusOk(resp)
+        user = User().load(resp.json['_id'], force=True)
+        self.assertEqual(user['admin'], False)
+
         # test admin flag as non-admin
         params['admin'] = 'true'
         resp = self.request(path='/user/%s' % nonAdminUser['_id'],
@@ -391,55 +406,13 @@ class UserTestCase(base.TestCase):
         self.assertEqual(resp.json[0]['lastName'], 'b_usr')
         self.assertEqual(resp.json[1]['lastName'], 'c_usr')
 
-    def testPasswordChangeAndReset(self):
+    def testPasswordChange(self):
         user = User().createUser('user1', 'passwd', 'tst', 'usr', 'user@user.com')
         user2 = User().createUser('user2', 'passwd', 'tst', 'usr', 'user2@user.com')
 
-        # Reset password should require email param
-        self.ensureRequiredParams(path='/user/password', method='DELETE', required={'email'})
-
-        # Reset email with an incorrect email
-        resp = self.request(path='/user/password', method='DELETE', params={
-            'email': 'bad_email@user.com'
-        })
-        self.assertStatus(resp, 400)
-        self.assertEqual(resp.json['message'], 'That email is not registered.')
-
-        # Actually reset password
-        self.assertTrue(base.mockSmtp.isMailQueueEmpty())
-        resp = self.request(path='/user/password', method='DELETE', params={
-            'email': 'user@user.com'
-        })
-        self.assertStatusOk(resp)
-        self.assertEqual(resp.json['message'], 'Sent password reset email.')
-
-        # Old password should no longer work
-        resp = self.request(path='/user/authentication', method='GET',
-                            basicAuth='user@user.com:passwd')
-        self.assertStatus(resp, 401)
-
-        self.assertTrue(base.mockSmtp.waitForMail())
-        msg = base.mockSmtp.getMail(parse=True)
-        body = msg.get_payload(decode=True).decode('utf8')
-
-        # Pull out the auto-generated password from the email
-        search = re.search('Your new password is: <b>(.*)</b>', body)
-        newPass = search.group(1)
-
-        # Login with the new password
-        resp = self.request(path='/user/authentication', method='GET',
-                            basicAuth='user@user.com:' + newPass)
-        self.assertStatusOk(resp)
-        self.assertHasKeys(resp.json, ('authToken',))
-        self.assertHasKeys(
-            resp.json['authToken'], ('token', 'expires'))
-        self._verifyAuthCookie(resp)
-
-        # Now test changing passwords the normal way
-
         # Must be logged in
         resp = self.request(path='/user/password', method='PUT', params={
-            'old': newPass,
+            'old': 'passwd',
             'new': 'something_else'
         })
         self.assertStatus(resp, 401)
@@ -455,7 +428,7 @@ class UserTestCase(base.TestCase):
 
         # Old password must be correct
         resp = self.request(path='/user/password', method='PUT', params={
-            'old': 'passwd',
+            'old': 'wrong_passwd',
             'new': 'something_else'
         }, user=user)
         self.assertStatus(resp, 403)
@@ -463,14 +436,14 @@ class UserTestCase(base.TestCase):
 
         # New password must meet requirements
         resp = self.request(path='/user/password', method='PUT', params={
-            'old': newPass,
+            'old': 'passwd',
             'new': 'x'
         }, user=user)
         self.assertStatus(resp, 400)
 
         # Change password successfully
         resp = self.request(path='/user/password', method='PUT', params={
-            'old': newPass,
+            'old': 'passwd',
             'new': 'something_else'
         }, user=user)
         self.assertStatusOk(resp)

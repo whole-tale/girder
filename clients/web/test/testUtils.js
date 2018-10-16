@@ -444,8 +444,9 @@ girderTest.testMetadata = function () {
         }
         waitsFor(function () {
             return $('input.g-widget-metadata-key-input').length === 1 &&
-                ((type === 'simple') ? $('textarea.g-widget-metadata-value-input').length === 1
-                                     : $('.jsoneditor > .jsoneditor-outer > .jsoneditor-tree').length === 1);
+                ((type === 'simple')
+                    ? $('textarea.g-widget-metadata-value-input').length === 1
+                    : $('.jsoneditor > .jsoneditor-outer > .jsoneditor-tree').length === 1);
         }, 'the add metadata input fields to appear');
         runs(function () {
             if (!elem) {
@@ -503,8 +504,9 @@ girderTest.testMetadata = function () {
         }
         waitsFor(function () {
             return $('input.g-widget-metadata-key-input').length === 0 &&
-                ((type === 'simple') ? $('textarea.g-widget-metadata-value-input').length === 0
-                                     : $('.jsoneditor > .jsoneditor-outer > .jsoneditor-tree').length === 0);
+                ((type === 'simple')
+                    ? $('textarea.g-widget-metadata-value-input').length === 0
+                    : $('.jsoneditor > .jsoneditor-outer > .jsoneditor-tree').length === 0);
         }, 'edit fields to disappear');
         waitsFor(function () {
             return $('.g-widget-metadata-row').length === expectedNum;
@@ -588,15 +590,23 @@ girderTest.waitForLoad = function (desc) {
         }
         return !$('.modal').data('bs.modal').$backdrop;
     }, 'any modal dialog to be hidden' + desc);
+    /* We used to just make sure that we were no longer in transition, had
+     * outstanding web requests, and loading blocks were gone.  However, some
+     * actions would release their time slice only to schedule another action
+     * as soon as possible, and thus not really be finished.  This waits a few
+     * extra time slices before assuming that loading is finished, which works
+     * around this. */
+    var clearCount = 0;
     waitsFor(function () {
-        return !girder._inTransition;
-    }, 'transitions to finish');
-    waitsFor(function () {
-        return girder.rest.numberOutstandingRestRequests() === 0;
-    }, 'rest requests to finish' + desc);
-    waitsFor(function () {
-        return $('.g-loading-block').length === 0;
-    }, 'all blocks to finish loading' + desc);
+        if (girder._inTransition ||
+                girder.rest.numberOutstandingRestRequests() ||
+                $('.g-loading-block').length) {
+            clearCount = 0;
+            return false;
+        }
+        clearCount += 1;
+        return clearCount > 2;
+    }, 'transitions, rest requests, and block loads to finish' + desc);
 };
 
 /**
@@ -1218,7 +1228,7 @@ girderTest.anonymousLoadPage = function (logoutFirst, fragment, hasLoginDialog, 
 /*
  * Provide an alternate path to injecting a test spec as a url query parameter.
  *
- * To use, start girder in testing mode: `python -m girder --testing` and
+ * To use, start girder in testing mode: `girder serve --testing` and
  * browse to the test html with a spec provided:
  *
  *   http://localhost:8080/static/built/testing/testEnv.html?spec=%2Fclients%2Fweb%2Ftest%2Fspec%2FversionSpec.js
@@ -1278,6 +1288,21 @@ girderTest.startApp = function () {
                 parentView: null,
                 start: false
             });
+            /* Add a handler to allow tests to use
+             *   $(<a element with href>).click()
+             * to test clicking on links. */
+            girder.app.events = girder.app.events || {};
+            girder.app.events['click a'] = function (evt) {
+                if (!evt.isDefaultPrevented()) {
+                    var elem = $(evt.target),
+                        href = elem.attr('href');
+                    if (elem.is('a') && href && href.substr(0, 1) === '#') {
+                        girder.router.navigate(href.substr(1), {trigger: true});
+                        evt.preventDefault();
+                    }
+                }
+            };
+            girder.app.delegateEvents();
             return girder.app.start();
         })
         .then(function () {

@@ -21,7 +21,7 @@ import datetime
 import six
 from bson.objectid import ObjectId
 
-from girder import events
+from girder import events, logger
 from girder.api import rest
 from girder.constants import SettingKey
 from .model_base import Model
@@ -68,7 +68,8 @@ class Upload(Model):
 
         :param obj: The object representing the content to upload.
         :type obj: file-like
-        :param size: The total size of
+        :param size: The total size of the file.
+        :type size: int
         :param name: The name of the file to create.
         :type name: str
         :param parentType: The type of the parent: "folder" or "item".
@@ -90,7 +91,7 @@ class Upload(Model):
             parentType and parent).  This is intended for files that shouldn't
             appear as direct children of the parent, but are still associated
             with it.
-        :type attach: boolean
+        :type attachParent: boolean
         """
         upload = self.createUpload(
             user=user, name=name, parentType=parentType, parent=parent,
@@ -104,7 +105,7 @@ class Upload(Model):
             if not data:
                 break
 
-            upload = self.handleChunk(upload, RequestBodyStream(six.BytesIO(data), size))
+            upload = self.handleChunk(upload, RequestBodyStream(six.BytesIO(data), len(data)))
 
         return upload
 
@@ -242,6 +243,9 @@ class Upload(Model):
         events.trigger('model.file.finalizeUpload.after', event_document)
         if '_id' in upload:
             self.remove(upload)
+
+        logger.info('Upload complete. Upload=%s File=%s User=%s' % (
+            upload['_id'], file['_id'], upload['userId']))
 
         # Add an async event for handlers that wish to process this file.
         eventParams = {

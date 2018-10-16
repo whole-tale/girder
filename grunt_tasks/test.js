@@ -29,6 +29,7 @@ module.exports = function (grunt) {
                 files: {
                     'clients/web/static/built/testing/testing.min.js': [
                         'node_modules/core-js/client/shim.js',
+                        'node_modules/whatwg-fetch/fetch.js',
                         'clients/web/test/lib/jasmine-1.3.1/jasmine.js',
                         'clients/web/test/lib/jasmine-1.3.1/ConsoleReporter.js',
                         'clients/web/test/testUtils.js'
@@ -52,8 +53,7 @@ module.exports = function (grunt) {
                             '/static/built/fontello/css/fontello.css',
                             '/static/built/fontello/css/animation.css',
                             '/static/built/girder_lib.min.css',
-                            '/static/built/girder_app.min.css',
-                            '/static/built/testing.min.css'
+                            '/static/built/testing/testing.min.css'
                         ],
                         jsFiles: [
                             '/static/built/girder_lib.min.js',

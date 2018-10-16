@@ -256,6 +256,18 @@ class AssetstoreTestCase(base.TestCase):
         self.assertIsNone(File().load(file['_id'], force=True))
         self.assertTrue(os.path.isfile(file['path']))
 
+        # Attempt to import a folder with an item directly into user; should fail
+        resp = self.request(
+            '/assetstore/%s/import' % self.assetstore['_id'], method='POST', params={
+                'importPath': os.path.join(
+                    ROOT_DIR, 'tests', 'cases', 'py_client', 'testdata'),
+                'destinationType': 'user',
+                'destinationId': self.admin['_id']
+            }, user=self.admin)
+        self.assertStatus(resp, 400)
+        self.assertEqual(
+            resp.json['message'], 'Files cannot be imported directly underneath a user.')
+
     def testFilesystemAssetstoreImportLeafFoldersAsItems(self):
         folder = six.next(Folder().childFolders(
             self.admin, parentType='user', force=True, filters={
@@ -496,7 +508,8 @@ class AssetstoreTestCase(base.TestCase):
     def testS3AssetstoreAdapter(self):
         # Delete the default assetstore
         Assetstore().remove(self.assetstore)
-        s3Regex = r'^https://s3.amazonaws.com(:443)?/bucketname/foo/bar'
+        s3Regex = (r'^(https://s3.amazonaws.com(:443)?/bucketname/foo/bar|'
+                   'https://bucketname.s3.amazonaws.com(:443)?/foo/bar)')
 
         params = {
             'name': 'S3 Assetstore',
@@ -675,7 +688,7 @@ class AssetstoreTestCase(base.TestCase):
         # Test download as part of a streaming zip
         @httmock.all_requests
         def s3_pipe_mock(url, request):
-            if url.netloc.startswith('s3.amazonaws.com') and url.scheme == 'https':
+            if 's3.amazonaws.com' in url.netloc and url.scheme == 'https':
                 return 'dummy file contents'
             else:
                 raise Exception('Unexpected url %s' % url)

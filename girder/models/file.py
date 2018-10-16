@@ -19,13 +19,16 @@
 
 import cherrypy
 import datetime
+import os
 import six
 
 from .model_base import Model, AccessControlledModel
-from girder import events
-from girder.constants import AccessType, CoreEventHandler
-from girder.exceptions import ValidationException
+from girder import auditLogger, events
+from girder.constants import AccessType, CoreEventHandler, SettingKey
+from girder.exceptions import FilePathException, ValidationException
+from girder.models.setting import Setting
 from girder.utility import acl_mixin
+from girder.utility import path as path_util
 
 
 class File(acl_mixin.AccessControlMixin, Model):
@@ -39,6 +42,7 @@ class File(acl_mixin.AccessControlMixin, Model):
         self.ensureIndices(
             ['itemId', 'assetstoreId', 'exts'] +
             assetstore_utilities.fileIndexFields())
+        self.ensureTextIndex({'name': 1})
         self.resourceColl = 'item'
         self.resourceParent = 'itemId'
 
@@ -102,6 +106,15 @@ class File(acl_mixin.AccessControlMixin, Model):
             'startByte': offset,
             'endByte': endByte})
 
+        auditLogger.info('file.download', extra={
+            'details': {
+                'fileId': file['_id'],
+                'startByte': offset,
+                'endByte': endByte,
+                'extraParameters': extraParameters
+            }
+        })
+
         if file.get('assetstoreId'):
             try:
                 fileDownload = self.getAssetstoreAdapter(file).downloadFile(
@@ -146,7 +159,7 @@ class File(acl_mixin.AccessControlMixin, Model):
                             'endByte': endByte,
                             'redirect': False})
                 return stream
-        else:  # pragma: no cover
+        else:
             raise Exception('File has no known download mechanism.')
 
     def validate(self, doc):
@@ -161,12 +174,30 @@ class File(acl_mixin.AccessControlMixin, Model):
                 raise ValidationException(
                     'Linked file URL must start with http: or https:.',
                     'linkUrl')
+        if doc.get('assetstoreType'):
+            # If assetstore model is overridden, make sure it's a valid model
+            self._getAssetstoreModel(doc)
         if 'name' not in doc or not doc['name']:
             raise ValidationException('File name must not be empty.', 'name')
 
         doc['exts'] = [ext.lower() for ext in doc['name'].split('.')[1:]]
 
         return doc
+
+    def _getAssetstoreModel(self, file):
+        from .assetstore import Assetstore
+
+        if file.get('assetstoreType'):
+            try:
+                if isinstance(file['assetstoreType'], six.string_types):
+                    return self.model(file['assetstoreType'])
+                else:
+                    return self.model(*file['assetstoreType'])
+            except Exception:
+                raise ValidationException(
+                    'Invalid assetstore type: %s.' % (file['assetstoreType'],))
+        else:
+            return Assetstore()
 
     def createLinkFile(self, name, parent, parentType, url, creator, size=None,
                        mimeType=None, reuseExisting=False):
@@ -272,7 +303,7 @@ class File(acl_mixin.AccessControlMixin, Model):
         }, field='size', amount=sizeIncrement, multi=False)
 
     def createFile(self, creator, item, name, size, assetstore, mimeType=None,
-                   saveFile=True, reuseExisting=False):
+                   saveFile=True, reuseExisting=False, assetstoreType=None):
         """
         Create a new file record in the database.
 
@@ -290,6 +321,11 @@ class File(acl_mixin.AccessControlMixin, Model):
         :param reuseExisting: If a file with the same name already exists in
             this location, return it rather than creating a new file.
         :type reuseExisting: bool
+        :param assetstoreType: If a model other than assetstore will be used to
+            initialize the assetstore adapter for this file, use this parameter to
+            specify it. If it's a core model, pass its string name. If it's a plugin
+            model, use a 2-tuple of the form (modelName, pluginName).
+        :type assetstoreType: str or tuple
         """
         if reuseExisting:
             existing = self.findOne({
@@ -308,6 +344,9 @@ class File(acl_mixin.AccessControlMixin, Model):
             'size': size,
             'itemId': item['_id'] if item else None
         }
+
+        if assetstoreType:
+            file['assetstoreType'] = assetstoreType
 
         if saveFile:
             return self.save(file)
@@ -353,10 +392,9 @@ class File(acl_mixin.AccessControlMixin, Model):
         """
         Return the assetstore adapter for the given file.
         """
-        from .assetstore import Assetstore
         from girder.utility import assetstore_utilities
 
-        assetstore = Assetstore().load(file['assetstoreId'])
+        assetstore = self._getAssetstoreModel(file).load(file['assetstoreId'])
         return assetstore_utilities.getAssetstoreAdapter(assetstore)
 
     def copyFile(self, srcFile, creator, item=None):
@@ -448,3 +486,41 @@ class File(acl_mixin.AccessControlMixin, Model):
         :rtype: girder.utility.abstract_assetstore_adapter.FileHandle
         """
         return self.getAssetstoreAdapter(file).open(file)
+
+    def getGirderMountFilePath(self, file, validate=True):
+        """
+        If possible, get the path of the file on a local girder mount.
+
+        :param file: The file document.
+        :param validate: if True, check if the path exists and raise an
+            exception if it does not.
+        :returns: a girder mount path to the file or None if no such path is
+            available.
+        """
+        mount = Setting().get(SettingKey.GIRDER_MOUNT_INFORMATION, None)
+        if mount:
+            path = mount['path'].rstrip('/') + path_util.getResourcePath('file', file, force=True)
+            if not validate or os.path.exists(path):
+                return path
+        if validate:
+            raise FilePathException('This file isn\'t accessible from a Girder mount.')
+
+    def getLocalFilePath(self, file):
+        """
+        If an assetstore adapter supports it, return a path to the file on the
+        local file system.
+
+        :param file: The file document.
+        :returns: a local path to the file or None if no such path is known.
+        """
+        adapter = self.getAssetstoreAdapter(file)
+        try:
+            return adapter.getLocalFilePath(file)
+        except FilePathException as exc:
+            try:
+                return self.getGirderMountFilePath(file, True)
+            except Exception:
+                # If getting a Girder mount path throws, raise the original
+                # exception
+                pass
+            raise exc

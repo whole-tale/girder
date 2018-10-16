@@ -23,6 +23,12 @@ form.g-settings-form(role="form")
         button#g-core-banner-default-color.form-control.input-sm(
             type="button", title="Default color") default
   .form-group
+    label(for="g-core-privacy-notice") Privacy Notice Link
+    input#g-core-privacy-notice.form-control.input-sm(
+        type="text", value=settings['core.privacy_notice'] || '',
+        placeholder=`Default: ${defaults['core.privacy_notice'] || 'none'}`,
+        title="The privacy notice link.")
+  .form-group
     label(for="g-core-cookie-lifetime") Cookie duration (days)
     input#g-core-cookie-lifetime.form-control.input-sm(
         type="text", value=settings['core.cookie_lifetime'] || '',
@@ -213,6 +219,18 @@ form.g-settings-form(role="form")
                 type="text", value=settings['core.upload_minimum_chunk_size'] || '',
                 placeholder=`Default: ${defaults['core.upload_minimum_chunk_size'] || 'none'}`,
                 title="For large files, the minimum size of all but the last chunk.")
+          .form-group
+            label Server Notification Stream
+            br
+            span Disabling this may improve server performance with many concurrent web client users.
+            .checkbox
+              label(for="g-core-enable-notification-stream")
+                input#g-core-enable-notification-stream(
+                type="checkbox", checked=(
+                  settings['core.enable_notification_stream'] === null ?
+                  defaults['core.enable_notification_stream'] :
+                  settings['core.enable_notification_stream']))
+                | Enabled
           .g-settings-form-container
             h4 CORS
             p.

@@ -1,4 +1,4 @@
-FROM node:6
+FROM node:8-stretch
 MAINTAINER Kitware, Inc. <kitware@kitware.com>
 
 EXPOSE 8080
@@ -6,7 +6,7 @@ EXPOSE 8080
 RUN mkdir /girder
 RUN mkdir /girder/logs
 
-RUN apt-get -qqy update && apt-get install -qy software-properties-common python3-software-properties && \
+RUN apt-get -qqy update && apt-get install -qy software-properties-common python-software-properties && \
   apt-get update -qqy && apt-get install -qy \
     build-essential \
     git \
@@ -15,7 +15,7 @@ RUN apt-get -qqy update && apt-get install -qy software-properties-common python
     libsasl2-dev \
     libssl-dev \
     libldap2-dev \
-    libpython3-dev && \
+    libpython2.7-dev && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN npm config set progress false
@@ -32,7 +32,7 @@ COPY setup.py /girder/setup.py
 COPY package.json /girder/package.json
 COPY README.rst /girder/README.rst
 
-RUN python3 -m pip install -e .[plugins,sftp]
+RUN python2 -m pip install --upgrade --upgrade-strategy eager --editable .[plugins]
 RUN girder-install web --all-plugins
 
-ENTRYPOINT ["python3", "-m", "girder"]
+ENTRYPOINT ["girder", "serve"]

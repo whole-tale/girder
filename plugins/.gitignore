@@ -2,6 +2,7 @@
 # editing it.
 /*
 !.gitignore
+!audit_logs/
 !authorized_upload/
 !autojoin/
 !candela/
@@ -9,6 +10,7 @@
 !curation/
 !dicom_viewer/
 !download_statistics/
+!fuse/
 !geospatial/
 !google_analytics/
 !gravatar/
@@ -31,4 +33,5 @@
 !treeview/
 !user_quota/
 !vega/
+!virtual_folders/
 !worker/

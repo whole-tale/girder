@@ -1,6 +1,8 @@
 import $ from 'jquery';
+import _ from 'underscore';
 
-import vg from 'vega';
+import { parse,
+    View as VegaView } from 'vega-lib';
 
 import View from 'girder/views/View';
 import { AccessType } from 'girder/constants';
@@ -28,14 +30,13 @@ var VegaWidget = View.extend({
             restRequest({
                 url: `item/${this.item.id}/download`
             })
-                .done(function (spec) {
-                    vg.parse.spec(spec, function (chart) {
-                        chart({
-                            el: '.g-item-vega-vis',
-                            renderer: 'svg'
-                        }).update();
-                    });
-                });
+                .done(_.bind(function (spec) {
+                    let runtime = parse(spec);
+                    let view = new VegaView(runtime)
+                        .initialize($('.g-item-vega-vis')[0])
+                        .renderer('svg');
+                    view.run();
+                }, this));
         } else {
             $('.g-item-vega')
                 .remove();

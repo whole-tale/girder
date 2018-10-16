@@ -59,23 +59,26 @@ with open('README.rst') as f:
     readme = f.read()
 
 installReqs = [
-    'bcrypt',
-    'boto3',
+    'boto3>=1.7,<1.8',  # TODO: unpin once moto works with boto3>=1.8
+    'botocore<1.11.0',  # TODO: remove once moto works with boto3>=1.8
     # CherryPy version is restricted due to a bug in versions >=11.1
     # https://github.com/cherrypy/cherrypy/issues/1662
     'CherryPy<11.1',
     'click',
+    'click-plugins',
+    'dogpile.cache',
     'filelock',
-    'funcsigs ; python_version < \'3.5\'',
+    'funcsigs ; python_version < \'3\'',
     'jsonschema',
     'Mako',
+    'passlib [bcrypt,totp]',
     'pymongo>=3.5',
     'PyYAML',
     'psutil',
     'python-dateutil<2.7',  # required for compatibility with botocore=1.9.8
     'pytz',
     'requests',
-    'shutilwhich ; python_version < \'3.3\'',
+    'shutilwhich ; python_version < \'3\'',
     'six>=1.9',
 ]
 
@@ -110,7 +113,9 @@ extrasReqs['plugins'] = list(set(itertools.chain.from_iterable(extrasReqs.values
 extrasReqs['sftp'] = [
     'paramiko',
 ]
-
+extrasReqs['mount'] = [
+    'fusepy>=2.0.4,<3.0',
+]
 
 init = os.path.join(os.path.dirname(__file__), 'girder', '__init__.py')
 with open(init) as fd:
@@ -118,7 +123,6 @@ with open(init) as fd:
         r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]',
         fd.read(), re.MULTILINE).group(1)
 
-# perform the install
 setup(
     name='girder',
     version=version,
@@ -137,7 +141,7 @@ setup(
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4'
+        'Programming Language :: Python :: 3.5'
     ],
     packages=find_packages(
         exclude=('girder.test', 'tests.*', 'tests', '*.plugin_tests.*', '*.plugin_tests')
@@ -152,6 +156,7 @@ setup(
             'api/api_docs.mako'
         ]
     },
+    python_requires='>=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*',
     install_requires=installReqs,
     extras_require=extrasReqs,
     zip_safe=False,
@@ -160,10 +165,17 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'girder-server = girder.__main__:main',
+            'girder-server = girder.cli.serve:main',
             'girder-install = girder.utility.install:main',
-            'girder-sftpd = girder.api.sftp:_main',
-            'girder-shell = girder.utility.shell:main'
+            'girder-sftpd = girder.cli.sftpd:main',
+            'girder-shell = girder.cli.shell:main',
+            'girder = girder.cli:main'
+        ],
+        'girder.cli_plugins': [
+            'serve = girder.cli.serve:main',
+            'mount = girder.cli.mount:main',
+            'shell = girder.cli.shell:main',
+            'sftpd = girder.cli.sftpd:main'
         ]
     }
 )

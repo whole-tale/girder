@@ -68,6 +68,7 @@ var AccessWidget = View.extend({
         this.isAdmin = !!(this.currentUser && this.currentUser.get('admin'));
         this.searchWidget = new SearchFieldWidget({
             placeholder: 'Start typing a name...',
+            noResultsPage: true,
             modes: ['prefix', 'text'],
             types: ['group', 'user'],
             parentView: this
@@ -114,8 +115,7 @@ var AccessWidget = View.extend({
             };
         }
 
-        var template = this.modal ? accessEditorTemplate
-                                  : accessEditorNonModalTemplate;
+        var template = this.modal ? accessEditorTemplate : accessEditorNonModalTemplate;
 
         this.$el.html(template({
             _,
@@ -312,18 +312,18 @@ var AccessWidget = View.extend({
         var recurse = this.$('#g-apply-recursive').is(':checked');
 
         this.model.off('g:accessListSaved', null, this)
-                  .on('g:accessListSaved', function () {
-                      if (this.modal) {
-                          this.$el.modal('hide');
-                      }
+            .on('g:accessListSaved', function () {
+                if (this.modal) {
+                    this.$el.modal('hide');
+                }
 
-                      this.trigger('g:accessListSaved', {
-                          recurse: recurse
-                      });
-                  }, this).updateAccess({
-                      recurse: recurse,
-                      progress: true
-                  });
+                this.trigger('g:accessListSaved', {
+                    recurse: recurse
+                });
+            }, this).updateAccess({
+                recurse: recurse,
+                progress: true
+            });
     },
 
     getAccessList: function () {
@@ -339,7 +339,7 @@ var AccessWidget = View.extend({
                 name: $el.find('.g-desc-title').html(),
                 id: $el.attr('resourceid'),
                 level: parseInt(
-                    $el.find('.g-access-col-right>select').val(),
+                    $el.find('.g-access-col-right>select').val() || 0,
                     10
                 ),
                 flags: _.map($el.find('.g-flag-checkbox:checked'),
@@ -355,7 +355,7 @@ var AccessWidget = View.extend({
                 name: $el.find('.g-desc-title').html(),
                 id: $el.attr('resourceid'),
                 level: parseInt(
-                    $el.find('.g-access-col-right>select').val(),
+                    $el.find('.g-access-col-right>select').val() || 0,
                     10
                 ),
                 flags: _.map($el.find('.g-flag-checkbox:checked'),

@@ -28,6 +28,7 @@ from .model_base import Model
 from girder import logprint
 from girder.exceptions import ValidationException
 from girder.utility import config, setting_utilities
+from girder.utility._cache import cache
 from bson.objectid import ObjectId
 
 
@@ -98,6 +99,14 @@ class Setting(Model):
 
         return doc
 
+    @cache.cache_on_arguments()
+    def _get(self, key):
+        """
+        This method is so built in caching decorators can be used without specifying
+        custom logic for dealing with the default kwarg of self.get.
+        """
+        return self.findOne({'key': key})
+
     def get(self, key, default='__default__'):
         """
         Retrieve a setting by its key.
@@ -107,7 +116,8 @@ class Setting(Model):
         :param default: If no such setting exists, returns this value instead.
         :returns: The value, or the default value if the key is not found.
         """
-        setting = self.findOne({'key': key})
+        setting = self._get(key)
+
         if setting is None:
             if default is '__default__':
                 default = self.getDefault(key)
@@ -134,7 +144,11 @@ class Setting(Model):
         else:
             setting['value'] = value
 
-        return self.save(setting)
+        setting = self.save(setting)
+
+        self._get.set(setting, self, key)
+
+        return setting
 
     def unset(self, key):
         """
@@ -144,6 +158,7 @@ class Setting(Model):
         :param key: The key identifying the setting to be removed.
         :type key: str
         """
+        self._get.invalidate(self, key)
         for setting in self.find({'key': key}):
             self.remove(setting)
 
@@ -178,6 +193,12 @@ class Setting(Model):
             raise ValidationException('The banner color may not be empty', 'value')
         elif not (re.match(r'^#[0-9A-Fa-f]{6}$', doc['value'])):
             raise ValidationException('The banner color must be a hex color triplet', 'value')
+
+    @staticmethod
+    @setting_utilities.validator(SettingKey.PRIVACY_NOTICE)
+    def validateCorePrivacyNotice(doc):
+        if not doc['value']:
+            raise ValidationException('The privacy notice link may not be empty', 'value')
 
     @staticmethod
     @setting_utilities.validator(SettingKey.SECURE_COOKIE)
@@ -291,6 +312,12 @@ class Setting(Model):
         raise ValidationException(
             'Allowed origin must be a comma-separated list of base urls or * or an empty string.',
             'value')
+
+    @staticmethod
+    @setting_utilities.validator(SettingKey.CORS_EXPOSE_HEADERS)
+    def validateCoreCorsExposeHeaders(doc):
+        if not isinstance(doc['value'], six.string_types):
+            raise ValidationException('CORS exposed headers must be a string')
 
     @staticmethod
     @setting_utilities.validator(SettingKey.EMAIL_FROM_ADDRESS)
@@ -431,3 +458,18 @@ class Setting(Model):
         if doc['value'] not in ('public_private', 'none'):
             raise ValidationException(
                 'User default folders must be either "public_private" or "none".', 'value')
+
+    @staticmethod
+    @setting_utilities.validator(SettingKey.GIRDER_MOUNT_INFORMATION)
+    def validateCoreGirderMountInformation(doc):
+        value = doc['value']
+        if not isinstance(value, dict) or 'path' not in value:
+            raise ValidationException(
+                'Girder mount information must be a dict with the "path" key.')
+
+    @staticmethod
+    @setting_utilities.validator(SettingKey.ENABLE_NOTIFICATION_STREAM)
+    def validateEnableNotificationStream(doc):
+        if not isinstance(doc['value'], bool):
+            raise ValidationException(
+                'Enable notification stream option must be boolean.', 'value')
