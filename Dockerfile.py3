@@ -39,13 +39,13 @@ RUN cd /tmp && \
 WORKDIR /girder
 COPY girder /girder/girder
 COPY clients /girder/clients
-COPY plugins /girder/plugins
 COPY scripts /girder/scripts
 COPY grunt_tasks /girder/grunt_tasks
 COPY Gruntfile.js /girder/Gruntfile.js
 COPY setup.py /girder/setup.py
 COPY package.json /girder/package.json
 COPY README.rst /girder/README.rst
+COPY plugins /girder/plugins
 
 RUN python3 -m pip install --no-cache-dir -q \
   -r plugins/wholetale/requirements.txt \
@@ -54,7 +54,7 @@ RUN python3 -m pip install --no-cache-dir -q \
   -r plugins/wt_data_manager/requirements.txt \
   -e .[plugins,sftp]
 ENV NPM_CONFIG_LOGLEVEL=warn NPM_CONFIG_COLOR=false NPM_CONFIG_PROGRESS=false
-RUN girder-install web --all-plugins && \
+RUN girder-install web --plugins=oauth,gravatar,jobs,worker,wt_data_manager,wholetale,wt_home_dir && \
   rm -rf /root/.npm /tmp/npm* /girder/node_modules
 
 RUN python3 -c "import nltk; nltk.download('wordnet')"
@@ -82,4 +82,14 @@ RUN sed \
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 
+# install GCP client
+ENV GCP_URL=https://downloads.globus.org/globus-connect-personal/linux/stable/globusconnectpersonal-latest.tgz
+RUN wget -qO- $GCP_URL | tar xz -C /opt && \
+  mv /opt/globusconnectpersonal-* /opt/globusconnectpersonal
+
+RUN groupadd -r girder \
+  && useradd --no-log-init -m -r -g girder girder \
+  && chown girder:girder -R /girder
+
+USER girder
 ENTRYPOINT ["girder", "serve"]
