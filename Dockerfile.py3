@@ -10,6 +10,7 @@ RUN apt-get -qqy update && apt-get install -qy software-properties-common python
   apt-get update -qqy && apt-get install -qy \
     build-essential \
     git \
+    gosu \
     xsltproc \
     python3-cairo \
     python3-gi \
@@ -91,5 +92,7 @@ RUN groupadd -r girder \
   && useradd --no-log-init -m -r -g girder girder \
   && chown girder:girder -R /girder
 
-USER girder
-ENTRYPOINT ["girder", "serve"]
+ENV GOSU_USER=0:0
+COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["girder", "serve"]
