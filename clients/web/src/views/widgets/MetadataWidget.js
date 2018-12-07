@@ -66,9 +66,7 @@ var MetadatumWidget = View.extend({
 
     // @todo too much duplication with editMetadata
     toggleEditor: function (event, newEditorMode, existingEditor, overrides) {
-        var fromEditorMode =
-                (existingEditor instanceof JsonMetadatumEditWidget)
-                    ? 'json' : 'simple';
+        var fromEditorMode = (existingEditor instanceof JsonMetadatumEditWidget) ? 'json' : 'simple';
         var newValue = (overrides || {}).value || existingEditor.$el.attr('g-value');
         if (!this._validate(fromEditorMode, newEditorMode, newValue)) {
             return;
@@ -196,14 +194,14 @@ var MetadatumEditWidget = View.extend({
                 _.escape(this.key) + '</b>?',
             escapedHtml: true,
             yesText: 'Delete',
-            confirmCallback: _.bind(function () {
+            confirmCallback: () => {
                 this.item.removeMetadata(this.key, function () {
                     metadataList.remove();
                 }, null, {
                     field: this.fieldName,
                     path: this.apiPath
                 });
-            }, this)
+            }
         };
         confirm(params);
     },
@@ -234,7 +232,7 @@ var MetadatumEditWidget = View.extend({
             return;
         }
 
-        var saveCallback = _.bind(function () {
+        var saveCallback = () => {
             this.key = tempKey;
             this.value = tempValue;
 
@@ -250,7 +248,7 @@ var MetadatumEditWidget = View.extend({
             this.parentView.render();
 
             this.newDatum = false;
-        }, this);
+        };
 
         var errorCallback = function (out) {
             events.trigger('g:alert', {

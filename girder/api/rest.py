@@ -24,25 +24,32 @@ import datetime
 import inspect
 import json
 import posixpath
+import pymongo
 import six
 import sys
 import traceback
+import types
 import unicodedata
 
+from dogpile.cache.util import kwarg_function_key_generator
+from girder.external.mongodb_proxy import MongoProxy
+
 from . import docs
-from girder import events, logger, logprint
+from girder import auditLogger, events, logger, logprint
 from girder.constants import SettingKey, TokenScope, SortDir
-from girder.exceptions import AccessException, GirderException, ValidationException, \
-    RestException
+from girder.exceptions import AccessException, GirderException, ValidationException, RestException
 from girder.models.setting import Setting
 from girder.models.token import Token
 from girder.models.user import User
 from girder.utility import toBool, config, JsonEncoder, optionalArgumentDecorator
+from girder.utility._cache import requestCache
 from girder.utility.model_importer import ModelImporter
 from six.moves import range, urllib
 
 # Arbitrary buffer length for stream-reading request bodies
 READ_BUFFER_LEN = 65536
+
+_MONGO_CURSOR_TYPES = (MongoProxy, pymongo.cursor.Cursor, pymongo.command_cursor.CommandCursor)
 
 
 def getUrlParts(url=None):
@@ -77,7 +84,7 @@ def getApiUrl(url=None, preferReferer=False):
         a cherrypy request that has a referer header that contains the api
         string, use that referer as the url.
     """
-    apiStr = '/api/v1'
+    apiStr = config.getConfig()['server']['api_root']
 
     if not url:
         if preferReferer and apiStr in cherrypy.request.headers.get('referer', ''):
@@ -85,7 +92,7 @@ def getApiUrl(url=None, preferReferer=False):
         else:
             root = Setting().get(SettingKey.SERVER_ROOT)
             if root:
-                return posixpath.join(root, config.getConfig()['server']['api_root'].lstrip('/'))
+                return posixpath.join(root, apiStr.lstrip('/'))
 
     url = url or cherrypy.url()
     idx = url.find(apiStr)
@@ -141,45 +148,8 @@ def iterBody(length=READ_BUFFER_LEN, strictLength=False):
             yield buf
 
 
-def _cacheAuthUser(fun):
-    """
-    This decorator for getCurrentUser ensures that the authentication procedure
-    is only performed once per request, and is cached on the request for
-    subsequent calls to getCurrentUser().
-    """
-    def inner(returnToken=False, *args, **kwargs):
-        if not returnToken and hasattr(cherrypy.request, 'girderUser'):
-            return cherrypy.request.girderUser
-
-        user = fun(returnToken, *args, **kwargs)
-        if isinstance(user, tuple):
-            setCurrentUser(user[0])
-        else:
-            setCurrentUser(user)
-
-        return user
-    return inner
-
-
-def _cacheAuthToken(fun):
-    """
-    This decorator for getCurrentToken ensures that the token lookup
-    is only performed once per request, and is cached on the request for
-    subsequent calls to getCurrentToken().
-    """
-    def inner(*args, **kwargs):
-        if hasattr(cherrypy.request, 'girderToken'):
-            return cherrypy.request.girderToken
-
-        token = fun(*args, **kwargs)
-        setattr(cherrypy.request, 'girderToken', token)
-
-        return token
-    return inner
-
-
-@_cacheAuthToken
-def getCurrentToken(allowCookie=False):
+@requestCache.cache_on_arguments(function_key_generator=kwarg_function_key_generator)
+def getCurrentToken(allowCookie=None):
     """
     Returns the current valid token object that was passed via the token header
     or parameter, or None if no valid token was passed.
@@ -190,9 +160,13 @@ def getCurrentToken(allowCookie=False):
         This should only be used on read-only operations that will not make any
         changes to data on the server, and only in cases where the user agent
         behavior makes passing custom headers infeasible, such as downloading
-        data to disk in the browser.
+        data to disk in the browser. In the event that allowCookie is not explicitly
+        passed, it will default to False unless the access.cookie decorator is used.
     :type allowCookie: bool
     """
+    if allowCookie is None:
+        allowCookie = getattr(cherrypy.request, 'girderAllowCookie', False)
+
     tokenStr = None
     if 'token' in cherrypy.request.params:  # Token as a parameter
         tokenStr = cherrypy.request.params.get('token')
@@ -207,7 +181,6 @@ def getCurrentToken(allowCookie=False):
     return Token().load(tokenStr, force=True, objectId=False)
 
 
-@_cacheAuthUser
 def getCurrentUser(returnToken=False):
     """
     Returns the currently authenticated user based on the token header or
@@ -220,6 +193,9 @@ def getCurrentUser(returnToken=False):
               logged in or the token is invalid or expired.  If
               returnToken=True, returns a tuple of (user, token).
     """
+    if not returnToken and hasattr(cherrypy.request, 'girderUser'):
+        return cherrypy.request.girderUser
+
     event = events.trigger('auth.user.get')
     if event.defaultPrevented and len(event.responses) > 0:
         return event.responses[0]
@@ -227,6 +203,8 @@ def getCurrentUser(returnToken=False):
     token = getCurrentToken()
 
     def retVal(user, token):
+        setCurrentUser(user)
+
         if returnToken:
             return user, token
         else:
@@ -475,7 +453,11 @@ class filtermodel(object):  # noqa: class name
 
             user = getCurrentUser()
 
-            if isinstance(val, (list, tuple)):
+            if isinstance(val, _MONGO_CURSOR_TYPES):
+                if callable(getattr(val, 'count', None)):
+                    cherrypy.response.headers['Girder-Total-Count'] = val.count()
+                return [model.filter(m, user, self.addFields) for m in val]
+            elif isinstance(val, (list, tuple, types.GeneratorType)):
                 return [model.filter(m, user, self.addFields) for m in val]
             elif isinstance(val, dict):
                 return model.filter(val, user, self.addFields)
@@ -542,7 +524,7 @@ def _createResponse(val):
     for accept in accepts:
         if accept.value == 'application/json':
             break
-        elif accept.value == 'text/html':  # pragma: no cover
+        elif accept.value == 'text/html':
             # Pretty-print and HTML-ify the response for the browser
             setResponseHeader('Content-Type', 'text/html')
             resp = cgi.escape(json.dumps(
@@ -600,6 +582,34 @@ def _handleValidationException(e):
     return val
 
 
+def _logRestRequest(resource, path, params):
+    auditLogger.info('rest.request', extra={
+        'details': {
+            'method': cherrypy.request.method.upper(),
+            'route': (getattr(resource, 'resourceName', resource.__class__.__name__),) + path,
+            'params': params,
+            'status': cherrypy.response.status or 200
+        }
+    })
+
+
+def _mongoCursorToList(val):
+    """
+    If the specified value is a Mongo cursor, convert it to a list.
+    Otherwise, just return the passed values.
+
+    :param val: a value that might be a Mongo cursor.
+    :returns: a list if val was a Mongo cursor, otherwise the original val.
+    """
+    # This needs to be before the callable check, as mongo cursors can
+    # be callable.
+    if isinstance(val, _MONGO_CURSOR_TYPES):
+        if callable(getattr(val, 'count', None)):
+            cherrypy.response.headers['Girder-Total-Count'] = val.count()
+        val = list(val)
+    return val
+
+
 def endpoint(fun):
     """
     REST HTTP method endpoints should use this decorator. It converts the return
@@ -613,26 +623,32 @@ def endpoint(fun):
     from the inner method.
     """
     @six.wraps(fun)
-    def endpointDecorator(self, *args, **kwargs):
+    def endpointDecorator(self, *path, **params):
         _setCommonCORSHeaders()
         cherrypy.lib.caching.expires(0)
         try:
-            val = fun(self, args, kwargs)
+            val = fun(self, path, params)
 
             # If this is a partial response, we set the status appropriately
             if 'Content-Range' in cherrypy.response.headers:
                 cherrypy.response.status = 206
+
+            val = _mongoCursorToList(val)
 
             if callable(val):
                 # If the endpoint returned anything callable (function,
                 # lambda, functools.partial), we assume it's a generator
                 # function for a streaming response.
                 cherrypy.response.stream = True
+                _logRestRequest(self, path, params)
                 return val()
 
             if isinstance(val, cherrypy.lib.file_generator):
                 # Don't do any post-processing of static files
                 return val
+
+            if isinstance(val, types.GeneratorType):
+                val = list(val)
 
         except RestException as e:
             val = _handleRestException(e)
@@ -656,7 +672,10 @@ def endpoint(fun):
                 # Unless we are in production mode, send a traceback too
                 val['trace'] = traceback.extract_tb(tb)
 
-        return _createResponse(val)
+        resp = _createResponse(val)
+        _logRestRequest(self, path, params)
+
+        return resp
     return endpointDecorator
 
 
@@ -683,7 +702,8 @@ def ensureTokenScopes(token, scope):
             'Invalid token scope.\n'
             'Required: %s.\n'
             'Allowed: %s' % (
-                ' '.join(scope), ' '.join(tokenModel.getAllowedScopes(token))))
+                ' '.join(scope),
+                '' if token is None else ' '.join(tokenModel.getAllowedScopes(token))))
 
 
 def _setCommonCORSHeaders():
@@ -702,6 +722,8 @@ def _setCommonCORSHeaders():
 
     if allowed:
         setResponseHeader('Access-Control-Allow-Credentials', 'true')
+        setResponseHeader(
+            'Access-Control-Expose-Headers', Setting().get(SettingKey.CORS_EXPOSE_HEADERS))
 
         allowed_list = [o.strip() for o in allowed.split(',')]
         key = 'Access-Control-Allow-Origin'
@@ -920,10 +942,8 @@ class Resource(ModelImporter):
                 forceCookie = False
             if cookieAuth:
                 if forceCookie or method in ('head', 'get'):
-                    # getCurrentToken will cache its output, so calling it
-                    # once with allowCookie will make the parameter
-                    # effectively permanent (for the request)
-                    getCurrentToken(allowCookie=True)
+                    # Allow cookies for the rest of the request
+                    setattr(cherrypy.request, 'girderAllowCookie', True)
 
         kwargs['params'] = params
         # Add before call for the API method. Listeners can return

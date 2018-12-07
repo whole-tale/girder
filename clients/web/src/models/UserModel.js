@@ -1,8 +1,10 @@
 import _ from 'underscore';
 
-import { fetchCurrentUser } from 'girder/auth';
+import { fetchCurrentUser, setCurrentUser } from 'girder/auth';
+import events from 'girder/events';
 import Model from 'girder/models/Model';
 import { restRequest } from 'girder/rest';
+import eventStream from 'girder/utilities/EventStream';
 
 var UserModel = Model.extend({
     resourceName: 'user',
@@ -21,13 +23,13 @@ var UserModel = Model.extend({
      */
     current: function () {
         fetchCurrentUser()
-            .done(_.bind(function (user) {
+            .done((user) => {
                 if (user) {
                     this.set(user);
                 } else {
                     this.clear();
                 }
-            }, this));
+            });
     },
 
     name: function () {
@@ -95,11 +97,11 @@ var UserModel = Model.extend({
             },
             method: 'PUT',
             error: null
-        }).done(_.bind(function () {
+        }).done(() => {
             this.trigger('g:passwordChanged');
-        }, this)).fail(_.bind(function (err) {
+        }).fail((err) => {
             this.trigger('g:error', err);
-        }, this));
+        });
     },
 
     /**
@@ -113,11 +115,73 @@ var UserModel = Model.extend({
             },
             method: 'PUT',
             error: null
-        }).done(_.bind(function () {
+        }).done(() => {
             this.trigger('g:passwordChanged');
-        }, this)).fail(_.bind(function (err) {
+        }).fail((err) => {
             this.trigger('g:error', err);
-        }, this));
+        });
+    },
+
+    initializeEnableOtp: function () {
+        return restRequest({
+            url: `user/${this.id}/otp`,
+            method: 'POST',
+            error: null
+        })
+            .then((resp) => {
+                return resp.totpUri;
+            });
+    },
+
+    finializeEnableOtp: function (otpToken) {
+        return restRequest({
+            url: `user/${this.id}/otp`,
+            method: 'PUT',
+            headers: {
+                'Girder-OTP': otpToken
+            },
+            error: null
+        })
+            .done(() => {
+                this.set('otp', true);
+            });
+    },
+
+    disableOtp: function () {
+        return restRequest({
+            url: `user/${this.id}/otp`,
+            method: 'DELETE',
+            error: null
+        })
+            .done(() => {
+                this.set('otp', false);
+            });
+    }
+}, {
+    fromTemporaryToken: function (userId, token) {
+        return restRequest({
+            url: `user/password/temporary/${userId}`,
+            method: 'GET',
+            data: {token: token},
+            error: null
+        }).done((resp) => {
+            resp.user.token = resp.authToken.token;
+            eventStream.close();
+            setCurrentUser(new UserModel(resp.user));
+            eventStream.open();
+            events.trigger('g:login-changed');
+        });
+    },
+
+    sendVerificationEmail: function (login) {
+        return restRequest({
+            url: 'user/verification',
+            method: 'POST',
+            data: {
+                login: login
+            },
+            error: null
+        });
     }
 });
 

@@ -16,18 +16,11 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Make sure girder-server entrypoint is on the path
+# Make sure girder entrypoint is on the path
 source "${virtualenv_activate}"
-which girder-server
+which girder
 if [ $? -ne 0 ]; then
-    echo "Error: girder-server not found on the executable path"
-    exit 1
-fi
-
-# Make sure extra data files were installed correctly
-ls "${virtualenv_dir}"/lib/python*/site-packages/girder/mail_templates/_header.mako
-if [ $? -ne 0 ]; then
-    echo "Error: mail templates were not installed"
+    echo "Error: girder not found on the executable path"
     exit 1
 fi
 
@@ -46,7 +39,7 @@ fi
 
 # Start the server
 export GIRDER_PORT=31200
-python -m girder &> /dev/null &
+girder serve &> /dev/null &
 
 girder_pid=$!
 sleep 1
@@ -104,7 +97,7 @@ fi
 
 # Start Girder server
 export GIRDER_PORT=50202
-python -m girder &> /dev/null &
+girder serve &> /dev/null &
 
 # Ensure the server started
 girder_pid=$!

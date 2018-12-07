@@ -135,7 +135,7 @@ class FilesystemAssetstoreAdapter(AbstractAssetstoreAdapter):
                 'Failed to get disk usage of %s' % self.assetstore['root'])
         # If psutil.disk_usage fails or we can't query the assetstore's root
         # directory, just report nothing regarding disk capacity
-        return {  # pragma: no cover
+        return {
             'free': None,
             'total': None
         }
@@ -350,6 +350,8 @@ class FilesystemAssetstoreAdapter(AbstractAssetstoreAdapter):
         :type mimeType: str
         :returns: The file document that was created.
         """
+        logger.debug('Importing file %s to item %s on filesystem assetstore %s',
+                     path, item['_id'], self.assetstore['_id'])
         stat = os.stat(path)
         name = name or os.path.basename(path)
 
@@ -359,7 +361,10 @@ class FilesystemAssetstoreAdapter(AbstractAssetstoreAdapter):
         file['path'] = os.path.abspath(os.path.expanduser(path))
         file['mtime'] = stat.st_mtime
         file['imported'] = True
-        return File().save(file)
+        file = File().save(file)
+        logger.debug('Imported file %s to item %s on filesystem assetstore %s',
+                     path, item['_id'], self.assetstore['_id'])
+        return file
 
     def _importDataAsItem(self, name, user, folder, path, files, reuseExisting=True, params=None):
         params = params or {}
@@ -401,6 +406,12 @@ class FilesystemAssetstoreAdapter(AbstractAssetstoreAdapter):
             return
 
         listDir = os.listdir(importPath)
+
+        if parentType != 'folder' and any(
+                os.path.isfile(os.path.join(importPath, val)) for val in listDir):
+            raise ValidationException(
+                'Files cannot be imported directly underneath a %s.' % parentType)
+
         if leafFoldersAsItems and self._hasOnlyFiles(importPath, listDir):
             self._importDataAsItem(
                 os.path.basename(importPath.rstrip(os.sep)), user, parent, importPath,
@@ -476,3 +487,16 @@ class FilesystemAssetstoreAdapter(AbstractAssetstoreAdapter):
                     'file': file,
                     'path': path
                 }
+
+    def getLocalFilePath(self, file):
+        """
+        Return a path to the file on the local file system.
+
+        :param file: The file document.
+        :returns: a local path to the file or None if no such path is known.
+        """
+        path = self.fullPath(file)
+        # If an imported file has moved, don't report the path
+        if path and os.path.exists(path):
+            return path
+        return super(FilesystemAssetstoreAdapter, self).getLocalFilePath(file)

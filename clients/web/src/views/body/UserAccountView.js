@@ -2,14 +2,14 @@ import $ from 'jquery';
 import _ from 'underscore';
 
 import ApiKeyListWidget from 'girder/views/widgets/ApiKeyListWidget';
+import UserOtpManagementWidget from 'girder/views/widgets/UserOtpManagementWidget';
 import router from 'girder/router';
 import UserModel from 'girder/models/UserModel';
 import View from 'girder/views/View';
 import { AccessType } from 'girder/constants';
 import events from 'girder/events';
-import eventStream from 'girder/utilities/EventStream';
-import { getCurrentUser, setCurrentUser } from 'girder/auth';
-import { restRequest, cancelRestRequests } from 'girder/rest';
+import { getCurrentUser } from 'girder/auth';
+import { cancelRestRequests } from 'girder/rest';
 
 import UserAccountTemplate from 'girder/templates/body/userAccount.pug';
 
@@ -43,14 +43,14 @@ var UserAccountView = View.extend({
                 this.$('#g-' + err.responseJSON.field).focus();
                 this.$('#g-user-info-error-msg').text(msg);
             }, this).off('g:saved')
-                    .on('g:saved', function () {
-                        events.trigger('g:alert', {
-                            icon: 'ok',
-                            text: 'Info saved.',
-                            type: 'success',
-                            timeout: 4000
-                        });
-                    }, this).save();
+                .on('g:saved', function () {
+                    events.trigger('g:alert', {
+                        icon: 'ok',
+                        text: 'Info saved.',
+                        type: 'success',
+                        timeout: 4000
+                    });
+                }, this).save();
         },
         'submit #g-password-change-form': function (event) {
             event.preventDefault();
@@ -70,15 +70,15 @@ var UserAccountView = View.extend({
                 var msg = err.responseJSON.message;
                 this.$('#g-password-change-error-msg').text(msg);
             }, this).off('g:passwordChanged')
-                    .on('g:passwordChanged', function () {
-                        events.trigger('g:alert', {
-                            icon: 'ok',
-                            text: 'Password changed.',
-                            type: 'success',
-                            timeout: 4000
-                        });
-                        this.$('#g-password-old,#g-password-new,#g-password-retype').val('');
-                    }, this);
+                .on('g:passwordChanged', function () {
+                    events.trigger('g:alert', {
+                        icon: 'ok',
+                        text: 'Password changed.',
+                        type: 'success',
+                        timeout: 4000
+                    });
+                    this.$('#g-password-old,#g-password-new,#g-password-retype').val('');
+                }, this);
 
             // here and in the template, an admin user who wants to change their
             //   own password is intentionally forced to re-enter their old
@@ -115,6 +115,11 @@ var UserAccountView = View.extend({
             parentView: this
         });
 
+        this.userOtpManagementWidget = new UserOtpManagementWidget({
+            user: this.user,
+            parentView: this
+        });
+
         this.render();
     },
 
@@ -133,15 +138,19 @@ var UserAccountView = View.extend({
 
         _.each($('.g-account-tabs>li>a'), function (el) {
             var tabLink = $(el);
-            tabLink.tab().on('shown.bs.tab', _.bind(function (e) {
+            tabLink.tab().on('shown.bs.tab', (e) => {
                 this.tab = $(e.currentTarget).attr('name');
                 router.navigate('useraccount/' + this.model.id + '/' + this.tab);
 
                 if (this.tab === 'apikeys') {
                     this.apiKeyListWidget.setElement(
                         this.$('.g-api-keys-list-container')).render();
+                } else if (this.tab === 'otp') {
+                    this.userOtpManagementWidget
+                        .setElement(this.$('.g-account-otp-container'))
+                        .render();
                 }
-            }, this));
+            });
 
             if (tabLink.attr('name') === this.tab) {
                 tabLink.tab('show');
@@ -164,28 +173,6 @@ var UserAccountView = View.extend({
         }, this).on('g:error', function () {
             router.navigate('users', {trigger: true});
         }, this).fetch();
-    },
-
-    temporaryPassword: function (id, token) {
-        restRequest({
-            url: `user/password/temporary/${id}`,
-            method: 'GET',
-            data: {token: token},
-            error: null
-        }).done(_.bind(function (resp) {
-            resp.user.token = resp.authToken.token;
-            eventStream.close();
-            setCurrentUser(new UserModel(resp.user));
-            eventStream.open();
-            events.trigger('g:login-changed');
-            events.trigger('g:navigateTo', UserAccountView, {
-                user: getCurrentUser(),
-                tab: 'password',
-                temporary: token
-            });
-        }, this)).fail(_.bind(function () {
-            router.navigate('users', {trigger: true});
-        }, this));
     }
 });
 

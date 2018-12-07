@@ -333,8 +333,8 @@ describe('Test hierarchy widget non-standard options', function () {
         });
 
         waitsFor(
-          function () { return folderSelected; },
-          'the folder select button to be clicked');
+            function () { return folderSelected; },
+            'the folder select button to be clicked');
 
         runs(function () {
             $('body').empty().off();
@@ -349,11 +349,11 @@ describe('Test hierarchy widget non-standard options', function () {
         });
 
         waitsFor(
-          function () {
-              return $('.g-hierarchy-widget').length > 0 &&
+            function () {
+                return $('.g-hierarchy-widget').length > 0 &&
                      $('.g-folder-list-link').length > 0;
-          },
-          'the hierarchy widget to display without the folder select button'
+            },
+            'the hierarchy widget to display without the folder select button'
         );
 
         runs(function () {
@@ -640,6 +640,29 @@ describe('Test access widget with non-standard options', function () {
                 widget.$('.g-recursive-container').length === 0 &&
                 widget.$('.g-user-access-entry select').length === 0;
         }, 'check if all component are hidden');
+
+        runs(function () {
+            widget.$('.g-search-field').val('First').trigger('input');
+        });
+        waitsFor(function () {
+            return widget.$('.g-search-result-element').length > 0;
+        });
+        runs(function () {
+            // this should do nothing
+            var e = $.Event('keydown');
+            e.which = 13;
+            widget.$('.g-search-field').trigger(e);
+            // this should add the user to the access list
+            widget.$('.g-search-result-element').eq(0).click();
+        });
+        waitsFor(function () {
+            return widget.getAccessList().users.length > 0;
+        });
+        runs(function () {
+            expect(widget.getAccessList().users[0].login).toBe('mylogin');
+            // the level should be zero
+            expect(widget.getAccessList().users[0].level).toBe(0);
+        });
     });
 });
 
@@ -668,8 +691,8 @@ describe('Test search widget with non-standard options', function () {
 
         runs(function () {
             var results = $('li.g-search-result');
-            expect(results.length).toBe(1);
-            expect(results.find('a[resourcetype="folder"]').text()).toContain('top level folder');
+            expect(results.length).toBe(2);
+            expect(results.find('a[data-resource-type="folder"]').text()).toContain('top level folder');
         });
     });
 

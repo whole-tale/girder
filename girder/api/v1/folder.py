@@ -53,7 +53,7 @@ class Folder(Resource):
     @filtermodel(model=FolderModel)
     @autoDescribeRoute(
         Description('Search for folders by certain properties.')
-        .notes('You must pass either a "folderId" or "text" field'
+        .notes('You must pass either a "folderId" or "text" field '
                'to specify how you are searching for folders.  '
                'If you omit one of these parameters the request will fail and respond : '
                '"Invalid search mode."')
@@ -94,12 +94,12 @@ class Folder(Resource):
             if name:
                 filters['name'] = name
 
-            return list(self._model.childFolders(
+            return self._model.childFolders(
                 parentType=parentType, parent=parent, user=user,
-                offset=offset, limit=limit, sort=sort, filters=filters))
+                offset=offset, limit=limit, sort=sort, filters=filters)
         elif text:
-            return list(self._model.textSearch(
-                text, user=user, limit=limit, offset=offset, sort=sort))
+            return self._model.textSearch(
+                text, user=user, limit=limit, offset=offset, sort=sort)
         else:
             raise RestException('Invalid search mode.')
 

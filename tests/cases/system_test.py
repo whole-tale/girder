@@ -18,6 +18,7 @@
 ###############################################################################
 
 import json
+import mock
 import os
 import time
 import six
@@ -102,6 +103,10 @@ class SystemTestCase(base.TestCase):
         if usingGit:
             self.assertEqual(resp.json['SHA'], sha)
             self.assertEqual(sha.find(resp.json['shortSHA']), 0)
+
+            resp = self.request(path='/system/version', method='GET', params={'fromGit': True})
+            self.assertStatusOk(resp)
+            self.assertEqual(resp.json['SHA'], resp.json['gitVersions']['core']['SHA'])
 
     def testSettings(self):
         users = self.users
@@ -221,12 +226,14 @@ class SystemTestCase(base.TestCase):
             SettingKey.BRAND_NAME: '',
             SettingKey.BANNER_COLOR: '',
             SettingKey.EMAIL_FROM_ADDRESS: '',
+            SettingKey.PRIVACY_NOTICE: '',
             SettingKey.CONTACT_EMAIL_ADDRESS: '',
             SettingKey.EMAIL_HOST: {},
             SettingKey.SMTP_HOST: '',
             SettingKey.CORS_ALLOW_ORIGIN: {},
             SettingKey.CORS_ALLOW_METHODS: {},
             SettingKey.CORS_ALLOW_HEADERS: {},
+            SettingKey.CORS_EXPOSE_HEADERS: {},
         }
         allKeys = dict.fromkeys(six.viewkeys(SettingDefault.defaults))
         allKeys.update(badValues)
@@ -251,14 +258,17 @@ class SystemTestCase(base.TestCase):
             }, user=users[0])
             self.assertStatusOk(resp)
 
-    def testPlugins(self):
+    @mock.patch('girder.utility.plugin_utilities.logprint.exception')
+    def testPlugins(self, logprint):
         resp = self.request(path='/system/plugins', user=self.users[0])
         self.assertStatusOk(resp)
         self.assertIn('all', resp.json)
         self.assertNotIn('.gitignore', resp.json['all'])
 
-        self.mockPluginDir(
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'test_plugins'))
+        testPluginPath = os.path.normpath(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), '..', '..', 'test', 'test_plugins'
+        ))
+        self.mockPluginDir(testPluginPath)
 
         resp = self.request(
             path='/system/plugins', method='PUT', user=self.users[0],
@@ -292,9 +302,12 @@ class SystemTestCase(base.TestCase):
         self.assertTrue('plugin_yaml' in enabled)
         self.unmockPluginDir()
 
-    def testBadPlugin(self):
-        self.mockPluginDir(
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bad_plugins'))
+    @mock.patch('girder.utility.plugin_utilities.logprint.exception')
+    def testBadPlugin(self, logprint):
+        pluginRoot = os.path.normpath(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), '..', '..', 'test', 'test_plugins'
+        ))
+        self.mockPluginDir(pluginRoot)
 
         # Enabling plugins with bad JSON/YML should still work.
         resp = self.request(

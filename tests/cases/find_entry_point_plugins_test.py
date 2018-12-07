@@ -18,7 +18,7 @@
 ###############################################################################
 
 import mock
-import sys
+import six
 import unittest
 
 from contextlib import contextmanager
@@ -104,7 +104,9 @@ class FindEntryPointPluginsTestCase(unittest.TestCase):
         resource_stream.return_value = resource_stream_json_value()
 
         plugins = {}
-        findEntryPointPlugins(plugins)
+        with mock.patch('girder.utility.plugin_utilities.logprint.exception') as logprint:
+            findEntryPointPlugins(plugins)
+            logprint.assert_called_once()
 
         iter_entry_points.assert_called_once_with(group='girder.plugin')
 
@@ -114,7 +116,7 @@ class FindEntryPointPluginsTestCase(unittest.TestCase):
         self.assertIn('entry_point_plugin_bad_json', failures)
         self.assertIn('traceback', failures['entry_point_plugin_bad_json'])
         self.assertIn(
-            'JSONDecodeError' if sys.version_info >= (3, 5) else 'ValueError',
+            'JSONDecodeError' if six.PY3 else 'ValueError',
             failures['entry_point_plugin_bad_json']['traceback'])
 
     @mock.patch('pkg_resources.resource_stream')
@@ -159,7 +161,9 @@ class FindEntryPointPluginsTestCase(unittest.TestCase):
         resource_stream.return_value = resource_stream_yaml_value()
 
         plugins = {}
-        findEntryPointPlugins(plugins)
+        with mock.patch('girder.utility.plugin_utilities.logprint.exception') as logprint:
+            findEntryPointPlugins(plugins)
+            logprint.assert_called_once()
 
         iter_entry_points.assert_called_once_with(group='girder.plugin')
 
@@ -182,7 +186,9 @@ class FindEntryPointPluginsTestCase(unittest.TestCase):
         _clearPluginFailureInfo.return_value = None
 
         plugins = {}
-        findEntryPointPlugins(plugins)
+        with mock.patch('girder.utility.plugin_utilities.logprint.exception') as logprint:
+            findEntryPointPlugins(plugins)
+            logprint.assert_called_once()
 
         iter_entry_points.assert_called_once_with(group='girder.plugin')
 
