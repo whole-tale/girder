@@ -24,10 +24,11 @@
                 el: 'body',
                 parentView: null,
                 contactEmail: '${contactEmail | js}',
+                privacyNoticeHref: '${privacyNoticeHref | js}',
                 brandName: '${brandName | js}',
                 bannerColor: '${bannerColor | js}',
                 registrationPolicy: '${registrationPolicy | js}',
-                enablePasswordLogin: ${enablePasswordLogin | n,json}
+                enablePasswordLogin: ${enablePasswordLogin | n,json,js}
             }).render();
             girder.events.trigger('g:appload.after', girder.app);
         });

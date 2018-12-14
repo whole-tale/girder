@@ -17,10 +17,15 @@
 #  limitations under the License.
 ###############################################################################
 import click
+import logging
 import requests
+from requests.adapters import HTTPAdapter
+from six.moves.http_client import HTTPConnection
 import sys
 import types
 from girder_client import GirderClient, __version__
+
+_logger = logging.getLogger('girder_client.cli')
 
 
 class GirderCli(GirderClient):
@@ -30,7 +35,8 @@ class GirderCli(GirderClient):
     """
 
     def __init__(self, username, password, host=None, port=None, apiRoot=None,
-                 scheme=None, apiUrl=None, apiKey=None, sslVerify=True):
+                 scheme=None, apiUrl=None, apiKey=None, sslVerify=True, token=None,
+                 retries=None):
         """
         Initialization function to create a GirderCli instance, will attempt
         to authenticate with the designated Girder instance. Aside from username, password,
@@ -42,6 +48,7 @@ class GirderCli(GirderClient):
             this blank to be prompted.
         :param sslVerify: disable SSL verification or specify path to certfile on
             :class:`requests.Session` object.
+        :param token: An authentication token to use.
         """
         def _progressBar(*args, **kwargs):
             bar = click.progressbar(*args, **kwargs)
@@ -79,16 +86,22 @@ class GirderCli(GirderClient):
         interactive = password is None
 
         self.sslVerify = sslVerify
+        self.retries = retries
+
+        if token:
+            self.setToken(token)
 
         if apiKey:
             self.authenticate(apiKey=apiKey)
         elif username:
             self.authenticate(username, password, interactive=interactive)
 
-    def _requestFunc(self, *args, **kwargs):
+    def sendRestRequest(self, *args, **kwargs):
         with self.session() as session:
             session.verify = self.sslVerify
-            return super(GirderCli, self)._requestFunc(*args, **kwargs)
+            if self.retries:
+                session.mount(self.urlBase, HTTPAdapter(max_retries=self.retries))
+            return super(GirderCli, self).sendRestRequest(*args, **kwargs)
 
 
 class _HiddenOption(click.Option):
@@ -133,6 +146,8 @@ _CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
               help='[default: GIRDER_API_KEY env. variable]')
 @click.option('--username', default=None)
 @click.option('--password', default=None)
+@click.option('-v', '--verbose', count=True,
+              help='Enable verbose mode (use multiple to increase verbosity)')
 # Advanced options
 @click.option('--host', default=None,
               cls=_AdvancedOption,
@@ -165,11 +180,18 @@ _CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
               show_default=True,
               cls=_AdvancedOption
               )
+@click.option('--token', default=None,
+              help='Authentication token to use',
+              show_default=True,
+              cls=_AdvancedOption)
+@click.option('--retries', default=None, type=click.INT,
+              help='Number of times to retry failed requests',
+              cls=_AdvancedOption)
 @click.version_option(version=__version__, prog_name='Girder command line interface')
 @click.pass_context
 def main(ctx, username, password,
          api_key, api_url, scheme, host, port, api_root,
-         no_ssl_verify, certificate):
+         no_ssl_verify, certificate, token, retries, verbose):
     """Perform common Girder CLI operations.
 
     The CLI is particularly suited to upload (or download) large, nested
@@ -183,6 +205,8 @@ def main(ctx, username, password,
     ``username`` is specified, the client will prompt the user to interactively
     input his/her password.
     """
+    _set_logging_level(verbose)
+
     # --api-url and URL by part arguments are mutually exclusive
     url_part_options = ['host', 'scheme', 'port', 'api_root']
     has_api_url = ctx.params.get('api_url', None)
@@ -204,11 +228,30 @@ def main(ctx, username, password,
 
     ctx.obj = GirderCli(
         username, password, host=host, port=port, apiRoot=api_root,
-        scheme=scheme, apiUrl=api_url, apiKey=api_key, sslVerify=ssl_verify)
+        scheme=scheme, apiUrl=api_url, apiKey=api_key, sslVerify=ssl_verify, token=token,
+        retries=retries)
 
     if certificate and ctx.obj.scheme != 'https':
         raise click.BadArgumentUsage(
             'A URI scheme of "https" is required for option "--certificate"')
+
+
+def _set_logging_level(verbosity):
+    if not verbosity:
+        level = logging.ERROR
+    if verbosity == 1:
+        level = logging.WARNING
+    elif verbosity == 2:
+        level = logging.INFO
+    elif verbosity >= 3:
+        HTTPConnection.debuglevel = 1
+        level = logging.DEBUG
+
+    requestsLogger = logging.getLogger('requests.packages.urllib3')
+    girderClientLogger = logging.getLogger('girder_client')
+    for logger in (requestsLogger, girderClientLogger):
+        logger.addHandler(logging.StreamHandler(sys.stderr))
+        logger.setLevel(level)
 
 
 def _lookup_parent_type(client, object_id):
@@ -324,4 +367,5 @@ def _upload(gc, parent_type, parent_id, local_folder,
 
 
 if __name__ == '__main__':
-    main()  # pragma: no cover
+    click.echo('Deprecation notice: Use "girder-client" to run the CLI.', err=True)
+    main()

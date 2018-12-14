@@ -52,10 +52,10 @@ describe('Create a data hierarchy', function () {
 
     it('register a user',
         girderTest.createUser('johndoe',
-                              'john.doe@email.com',
-                              'John',
-                              'Doe',
-                              'password!'));
+            'john.doe@email.com',
+            'John',
+            'Doe',
+            'password!'));
 
     it('create a folder', function () {
         runs(function () {
@@ -219,12 +219,11 @@ describe('Create a data hierarchy', function () {
 
         runs(function () {
             var results = $('.g-quick-search-container li.g-search-result');
-            expect(results.length).toBe(2);
+            expect(results.length).toBe(3);
+            expect(results.find('a[data-resource-type="folder"]').length).toBe(1);
+            expect(results.find('a[data-resource-type="user"]').length).toBe(1);
 
-            expect(results.find('a[resourcetype="folder"]').length).toBe(1);
-            expect(results.find('a[resourcetype="user"]').length).toBe(1);
-
-            results.find('a[resourcetype="user"]').click();
+            results.find('a[data-resource-type="user"]').click();
 
             expect(Backbone.history.fragment).toBe(
                 'user/' + girder.auth.getCurrentUser().get('_id'));
@@ -251,7 +250,6 @@ describe('Create a data hierarchy', function () {
             sendKeyDown(38, '.g-quick-search-container input.g-search-field');
             sendKeyDown(38, '.g-quick-search-container input.g-search-field');
             sendKeyDown(38, '.g-quick-search-container input.g-search-field');
-            sendKeyDown(40, '.g-quick-search-container input.g-search-field');
             sendKeyDown(40, '.g-quick-search-container input.g-search-field');
             sendKeyDown(13, '.g-quick-search-container input.g-search-field');
             expect(Backbone.history.fragment).toBe(
@@ -353,9 +351,9 @@ describe('Create a data hierarchy', function () {
             expect(widget.redirectViaForm).toHaveBeenCalled();
             expect(redirect.method).toBe('POST');
             expect(/^http:\/\/localhost:.*\/api\/v1\/resource\/download.*/
-                   .test(redirect.url)).toBe(true);
+                .test(redirect.url)).toBe(true);
             expect(/{"folder":.*,"item":.*}/.test(redirect.data.resources))
-                   .toBe(true);
+                .toBe(true);
         });
     });
 
@@ -570,10 +568,10 @@ describe('Create a data hierarchy', function () {
 
     it('register a second user',
         girderTest.createUser('janedoe',
-                              'jane.doe@email.com',
-                              'Jane',
-                              'Doe',
-                              'password!'));
+            'jane.doe@email.com',
+            'Jane',
+            'Doe',
+            'password!'));
 
     it('test copy permissions', function () {
         // navigate back to John Doe's Public folder
@@ -589,12 +587,12 @@ describe('Create a data hierarchy', function () {
 
         runs(function () {
             var results = $('.g-quick-search-container li.g-search-result');
-            expect(results.length).toBe(2);
+            expect(results.length).toBe(3);
 
-            expect(results.find('a[resourcetype="folder"]').length).toBe(1);
-            expect(results.find('a[resourcetype="user"]').length).toBe(1);
+            expect(results.find('a[data-resource-type="folder"]').length).toBe(1);
+            expect(results.find('a[data-resource-type="user"]').length).toBe(1);
 
-            results.find('a[resourcetype="user"]').click();
+            results.find('a[data-resource-type="user"]').click();
         });
 
         var oldPicked;
@@ -827,10 +825,10 @@ describe('Test FileModel static upload functions', function () {
     var folder, item;
 
     it('test prep - register a user', girderTest.createUser('dbowman',
-                                                            'dbowman@nasa.gov',
-                                                            'David',
-                                                            'Bowman',
-                                                            'jupiter'));
+        'dbowman@nasa.gov',
+        'David',
+        'Bowman',
+        'jupiter'));
 
     it('test prep - create top level folder', function () {
         runs(function () {

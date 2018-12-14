@@ -6,12 +6,12 @@ import 'bootstrap/js/popover';
 
 import View from 'girder/views/View';
 import { restRequest } from 'girder/rest';
+import router from 'girder/router';
 
 import SearchFieldTemplate from 'girder/templates/widgets/searchField.pug';
 import SearchHelpTemplate from 'girder/templates/widgets/searchHelp.pug';
 import SearchModeSelectTemplate from 'girder/templates/widgets/searchModeSelect.pug';
 import SearchResultsTemplate from 'girder/templates/widgets/searchResults.pug';
-
 import 'girder/stylesheets/widgets/searchFieldWidget.styl';
 
 /**
@@ -27,9 +27,9 @@ var SearchFieldWidget = View.extend({
             this.currentMode = $(e.target).val();
             this.hideResults().search();
 
-            window.setTimeout(_.bind(function () {
+            window.setTimeout(() => {
                 this.$('.g-search-mode-choose').popover('hide');
-            }, this), 250);
+            }, 250);
         },
 
         'click .g-search-result>a': function (e) {
@@ -39,25 +39,40 @@ var SearchFieldWidget = View.extend({
         'keydown .g-search-field': function (e) {
             var code = e.keyCode || e.which;
             var list, pos;
-            if (code === 40) { /* down arrow */
-                list = this.$('.g-search-result');
-                pos = list.index(list.filter('.g-search-selected')) + 1;
-                list.removeClass('g-search-selected');
-                if (pos < list.length) {
-                    list.eq(pos).addClass('g-search-selected');
-                }
-            } else if (code === 38) { /* up arrow */
-                list = this.$('.g-search-result');
-                pos = list.index(list.filter('.g-search-selected')) - 1;
-                list.removeClass('g-search-selected');
-                if (pos === -2) {
-                    pos = list.length - 1;
-                }
-                if (pos >= 0) {
-                    list.eq(pos).addClass('g-search-selected');
-                }
-            } else if (code === 13) { /* enter */
+            if (code === 13 && this.noResourceSelected) { /* enter without resource seleted */
                 e.preventDefault();
+                if (this.$('.g-search-field').val() !== '' && !this.noResultsPage) {
+                    this._goToResultPage(this.$('.g-search-field').val(), this.currentMode);
+                }
+            } else if (code === 40 || code === 38) {
+                this.noResourceSelected = false;
+                if (code === 40) { /* down arrow */
+                    list = this.$('.g-search-result');
+                    pos = list.index(list.filter('.g-search-selected')) + 1;
+                    list.removeClass('g-search-selected');
+                    if (pos < list.length) {
+                        list.eq(pos).addClass('g-search-selected');
+                    }
+                    if (pos === list.length) {
+                        this.noResourceSelected = true;
+                    }
+                } else if (code === 38) { /* up arrow */
+                    list = this.$('.g-search-result');
+                    pos = list.index(list.filter('.g-search-selected')) - 1;
+                    list.removeClass('g-search-selected');
+                    if (pos === -1) {
+                        this.noResourceSelected = true;
+                    }
+                    if (pos === -2) {
+                        pos = list.length - 1;
+                    }
+                    if (pos >= 0) {
+                        list.eq(pos).addClass('g-search-selected');
+                    }
+                }
+            } else if (code === 13) { /* enter with resource selected */
+                e.preventDefault();
+                this.noResourceSelected = true;
                 var link = this.$('.g-search-result.g-search-selected>a');
                 if (link.length) {
                     this._resultClicked(link);
@@ -76,13 +91,22 @@ var SearchFieldWidget = View.extend({
      *        representing the allowed search modes. Supported modes: "text", "prefix".
      *        If multiple are allowed, users are able to select which one to use
      *        via a dropdown.
+     * @param [settings.noResultsPage=false] If truthy, don't jump to a results
+     *        page if enter is typed with a list of search results.
      */
     initialize: function (settings) {
         this.ajaxLock = false;
         this.pending = null;
-
+        this.noResourceSelected = true;
         this.placeholder = settings.placeholder || 'Search...';
+        this.noResultsPage = settings.noResultsPage || false;
         this.getInfoCallback = settings.getInfoCallback || null;
+        /* The order of settings.types give the order of the display of the elements :
+         *     ['collection', 'folder', 'item'] will be render like this
+         *       [icon-collection] Collections..
+         *       [icon-folder] Folders..
+         *       [icon-item] Items..
+         */
         this.types = settings.types || [];
         this.modes = settings.modes || SearchFieldWidget.getModes();
 
@@ -91,6 +115,9 @@ var SearchFieldWidget = View.extend({
         }
 
         this.currentMode = this.modes[0];
+
+        // Do not change the icon for fast searches, to prevent jitter
+        this._animatePending = _.debounce(this._animatePending, 100);
     },
 
     search: function () {
@@ -110,13 +137,22 @@ var SearchFieldWidget = View.extend({
         return this;
     },
 
+    _goToResultPage: function (query, mode) {
+        this.resetState();
+        router.navigate(`#search/results?query=${query}&mode=${mode}`, {trigger: true});
+    },
+
     _resultClicked: function (link) {
-        this.trigger('g:resultClicked', {
-            type: link.attr('resourcetype'),
-            id: link.attr('resourceid'),
-            text: link.text().trim(),
-            icon: link.attr('g-icon')
-        });
+        if (link.data('resourceType') === 'resultPage') {
+            this._goToResultPage(this.$('.g-search-field').val(), this.currentMode);
+        } else {
+            this.trigger('g:resultClicked', {
+                type: link.data('resourceType'),
+                id: link.data('resourceId'),
+                text: link.text().trim(),
+                icon: link.data('resourceIcon')
+            });
+        }
     },
 
     render: function () {
@@ -133,12 +169,12 @@ var SearchFieldWidget = View.extend({
                 selector: 'body',
                 padding: 10
             },
-            content: _.bind(function () {
+            content: () => {
                 return SearchHelpTemplate({
                     mode: this.currentMode,
                     modeHelp: SearchFieldWidget.getModeHelp(this.currentMode)
                 });
-            }, this)
+            }
         }).click(function () {
             $(this).popover('toggle');
         });
@@ -150,13 +186,13 @@ var SearchFieldWidget = View.extend({
                 selector: 'body',
                 padding: 10
             },
-            content: _.bind(function () {
+            content: () => {
                 return SearchModeSelectTemplate({
                     modes: this.modes,
                     currentMode: this.currentMode,
                     getModeDescription: SearchFieldWidget.getModeDescription
                 });
-            }, this)
+            }
         }).click(function () {
             $(this).popover('toggle');
         });
@@ -188,9 +224,17 @@ var SearchFieldWidget = View.extend({
         return this.hideResults().clearText();
     },
 
+    _animatePending: function () {
+        const isPending = this.ajaxLock;
+        this.$('.g-search-state')
+            .toggleClass('icon-search', !isPending)
+            .toggleClass('icon-spin4 animate-spin', isPending);
+    },
+
     _doSearch: function (q) {
         this.ajaxLock = true;
         this.pending = null;
+        this._animatePending();
 
         restRequest({
             url: 'resource/search',
@@ -202,13 +246,20 @@ var SearchFieldWidget = View.extend({
                     SearchFieldWidget.getModeTypes(this.currentMode))
                 )
             }
-        }).done(_.bind(function (results) {
+        }).done((results) => {
             this.ajaxLock = false;
+            this._animatePending();
 
             if (this.pending) {
                 this._doSearch(this.pending);
             } else {
-                var list = this.$('.g-search-results>ul');
+                if (!this.$('.g-search-field').val()) {
+                    // The search field is empty, so this widget probably had "this.resetState"
+                    // called while the search was pending. So, don't render the (now obsolete)
+                    // results.
+                    return;
+                }
+
                 var resources = [];
                 _.each(this.types, function (type) {
                     _.each(results[type] || [], function (result) {
@@ -250,13 +301,12 @@ var SearchFieldWidget = View.extend({
                         });
                     }, this);
                 }, this);
-                list.html(SearchResultsTemplate({
-                    results: resources
+                this.$('.g-search-results>ul').html(SearchResultsTemplate({
+                    results: resources.slice(0, 6)
                 }));
-
                 this.$('.dropdown').addClass('open');
             }
-        }, this));
+        });
     }
 }, {
     _allowedSearchMode: {},

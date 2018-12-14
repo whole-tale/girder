@@ -508,6 +508,44 @@ login via a username and password. This allows alternative authentication
 modes to be used instead of core, or prior to attempting core authentication.
 The event info contains two keys, "login" and "password".
 
+Customizing the Swagger page
+****************************
+
+To customize text on the Swagger page, create a
+`Mako template <http://www.makotemplates.org/>`_ file that inherits from the
+base template and overrides one or more blocks. For example,
+``plugins/cats/server/custom_api_docs.mako``:
+
+.. code-block:: html+mako
+
+    <%inherit file="${context.get('baseTemplateFilename')}"/>
+
+    <%block name="docsHeader">
+      <span>Cat programming interface</span>
+    </%block>
+
+    <%block name="docsBody">
+      <p>Manage your cats using the resources below.</p>
+    </%block>
+
+Install the custom template in the ``load`` function:
+
+.. code-block:: python
+
+    def load(info):
+        # Initially, the value of info['apiRoot'].templateFilename is
+        # 'api_docs.mako'. Because custom_api_docs.mako inherits from this
+        # base template, pass 'api_docs.mako' in the variable that the
+        # <%inherit> directive references.
+        baseTemplateFilename = info['apiRoot'].templateFilename
+        info['apiRoot'].updateHtmlVars({
+            'baseTemplateFilename': baseTemplateFilename
+        })
+
+        # Set the path to the custom template
+        templatePath = os.path.join(info['pluginRootDir'], 'server', 'custom_api_docs.mako')
+        info['apiRoot'].setTemplatePath(templatePath)
+
 .. _client-side-plugins:
 
 Extending the Client-Side Application
@@ -915,11 +953,11 @@ The ``plugin_tests/cat_test.py`` file should look like:
 
 You can use all of the testing utilities provided by the ``base.TestCase`` class
 from core. You will also get coverage results for your plugin aggregated with
-the main Girder coverage results if coverage is enabled.
+the main Girder coverage results.
 
-.. note:: When enabling coverage in a plugin, only files residing under the plugin's
-          ``server`` directory will be included.  See :ref:`python-coverage-paths`
-          to change the paths used to generate python coverage reports.
+.. note:: Only files residing under the plugin's``server`` directory will be included in coverage.
+          See :ref:`python-coverage-paths` to change the paths used to generate Python coverage
+          reports.
 
 Testing Client-Side Code
 ************************
@@ -990,33 +1028,23 @@ Girder uses `ESLint <http://eslint.org/>`_ to perform static analysis of its own
 If the ``add_standard_plugin_tests`` CMake macro is used, these same tests are run on all
 Javascript code in the ``web_client`` and ``plugin_tests`` directories of a plugin.
 
-However, plugin developers can also choose to extend or even entirely override the core style rules.
-To do this, you only need to provide a path to a custom ESLint configuration file, using the
-``ESLINT_CONFIG_FILE`` option to ``add_eslint_test``. Of course, since ``add_standard_plugin_tests``
-should be prevented from adding these tests, static analysis should also be manually added to PugJS
-template files with ``add_puglint_test`` and ``add_stylint_test``. For example:
+Additionally, plugin developers can choose to extend or even entirely override Girder's default
+static analysis rules, using
+`ESLint's built-in configuration cascading <https://eslint.org/docs/user-guide/configuring#configuration-cascading-and-hierarchy>`_
+(which is more fully documented in ESLint):
 
-.. code-block:: cmake
+1. To extend or override some of Girder's default static analysis rules, place an ``.eslintrc.json``
+   file in a directory with or above the target Javascript files.
+2. To completely override all of Girder's default static analysis rules (i.e. disabling
+   cascading), add root ``"root": true`` to an ``.eslintrc.json``.
+3. To natively utilize Girder's default static analysis rules (from
+   `their published location <https://www.npmjs.com/package/eslint-config-girder>`_) within code
+   outside of Girder's ``plugins/`` directory structure, add ``"extends": "girder"`` to an
+   ``.eslintrc.json``. However, this is not strictly necessary for an external Girder plugins that
+   will be installed and tested under Girder's test framework (including the
+   ``add_standard_plugin_tests`` CMake macro).
 
-    add_standard_plugin_tests(NO_CLIENT)
-    add_eslint_test(js_static_analysis_cats "${PROJECT_SOURCE_DIR}/plugins/cats/web_client"
-        ESLINT_CONFIG_FILE "${PROJECT_SOURCE_DIR}/plugins/cats/.eslintrc.json")
-    add_puglint_test(cats "${PROJECT_SOURCE_DIR}/plugins/cats/web_client/templates")
-    add_stylint_test(cats "${PROJECT_SOURCE_DIR}/plugins/cats/web_client/stylesheets")
-
-You can `configure ESLint <http://eslint.org/docs/user-guide/configuring.html>`_ inside your
-``.eslintrc.json`` file however you choose.  For example, to extend Girder's own configuration to
-add a new global variable ``cats`` and stop requiring semicolons to terminate statements, you can
-put the following in your ``.eslintrc.json``:
-
-.. code-block:: javascript
-
-    {
-        "extends": "../../.eslintrc.json",
-        "globals": {
-            "cats": true
-        },
-        "rules": {
-            "semi": 0
-        }
-    }
+Finally, Javascript files within plugins' ``web_client/extra/`` directory will automatically
+excluded from ESLint static analysis. To
+`exclude additional Javascript files <https://eslint.org/docs/user-guide/configuring#disabling-rules-with-inline-comments>`_,
+place an ``/* eslint-disable */`` block comment at the top of files to be excluded.

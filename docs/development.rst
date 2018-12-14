@@ -10,7 +10,8 @@ the tools used to develop Girder.
 Configuring Your Development Environment
 ----------------------------------------
 
-In order to develop Girder, you should first refer to :doc:`prerequisites <prerequisites>`, `virtual environment <installation.html#creating-a-virtual-environment>`__, `install from Git <installation.html#install-from-git-repository>`__, and `run <installation.html#run>`__ sections to setup a basic local development environment.
+In order to develop Girder, you should first refer to the :doc:`installation quickstart <installation-quickstart>` and
+:doc:`installation (from Git) <installation>` guides to setup a basic local development environment.
 
 Next, you should install the Python development dependencies with pip, to
 provide helpful development tools and to allow the test suite to run: ::
@@ -42,7 +43,7 @@ documentation on how to set this up, see `Developer Installation <dev-installati
 During Development
 ------------------
 
-Once Girder is started via ``girder-server``, the server
+Once Girder is started via ``girder serve``, the server
 will reload itself whenever a Python file is modified.
 
 If you are doing front-end development, it's much faster to use a *watch* process to perform
@@ -69,7 +70,7 @@ are actually bound but requests can still be performed via Python. Bootstrapping
 involves running ``girder.utility.server.configureServer`` with the plugins to be enabled.
 
 Girder provides a utility script for entering into a shell with the server preconfigured. Once
-Girder is installed the script can be run using ``girder-shell`` which optionally takes a comma
+Girder is installed the script can be run using ``girder shell`` which optionally takes a comma
 separated list of plugins to enable.
 
 Utilities
@@ -237,7 +238,11 @@ Running the Tests with Coverage Tracing
 To run Python coverage on your tests, configure with CMake and run CTest.
 The coverage data will be automatically generated. After the tests are run,
 you can find the HTML output from the coverage tool in the source directory
-under **/clients/web/dev/built/py_coverage**.
+under **build/test/artifacts/**.
+
+.. note:: Non-packaged third-party modules in the the ``girder/external`` directory are not included
+          in test coverage tracking.
+
 
 Client Side Testing
 -------------------
@@ -340,7 +345,7 @@ you should point girder to an empty database ::
 
 You can browse the result in Girder by running ::
 
-    GIRDER_MONGO_URI='mongodb://127.0.0.1:27017/mytest' girder-server
+    GIRDER_MONGO_URI='mongodb://127.0.0.1:27017/mytest' girder serve
 
 .. note::
 
@@ -448,12 +453,11 @@ Web client libraries in Girder core are managed via `npm <https://www.npmjs.com/
 When a new npm package is required, or an existing package is upgraded, the following
 should be done:
 
-1. Ensure that you are using a Linux development environment (macOS causes npm to produce slightly
-   different outputs) with version >=5.3 of npm installed:
+1. Ensure that you are using a development environment with version >=5.6 of npm installed:
 
    .. code-block:: bash
 
-       npm install -g 'npm@>=5.3'
+       npm install -g 'npm@>=5.6'
 
 2. Update ``dependencies`` or ``devDependencies`` in ``package.json`` to add a new
    *abstract* specifier for the package:
@@ -563,7 +567,7 @@ The process for releasing the python client is as follows:
         python setup.py sdist --dist-dir .
 
 3.  That should have created the package tarball as ``girder-client-<version>.tar.gz``.
-    Install it locally in a virtualenv and ensure that you can call the ``girder-cli``
+    Install it locally in a virtualenv and ensure that you can call the ``girder-client``
     executable.
 
     .. code-block:: bash
@@ -572,7 +576,7 @@ The process for releasing the python client is as follows:
         virtualenv release
         source release/bin/activate
         pip install ../girder-client-<version>.tar.gz
-        girder-cli
+        girder-client
 
 4.  Go back to the ``clients/python`` directory and upload the package to pypi:
 

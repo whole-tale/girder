@@ -1,9 +1,8 @@
-import _ from 'underscore';
-
 import PluginConfigBreadcrumbWidget from 'girder/views/widgets/PluginConfigBreadcrumbWidget';
 import View from 'girder/views/View';
 import events from 'girder/events';
 import { restRequest } from 'girder/rest';
+import router from 'girder/router';
 
 import ConfigViewTemplate from '../templates/configView.pug';
 
@@ -26,6 +25,10 @@ var ConfigView = View.extend({
                 key: 'worker.direct_path',
                 value: this.$('#g-worker-direct-path').is(':checked')
             }]);
+        },
+
+        'click .q-worker-task-info': function (event) {
+            router.navigate('#plugins/worker/task/status', {trigger: true});
         }
     },
 
@@ -41,13 +44,13 @@ var ConfigView = View.extend({
                     'worker.direct_path'
                 ])
             }
-        }).done(_.bind(function (resp) {
+        }).done((resp) => {
             this.render();
             this.$('#g-worker-api-url').val(resp['worker.api_url']);
             this.$('#g-worker-broker').val(resp['worker.broker']);
             this.$('#g-worker-backend').val(resp['worker.backend']);
             this.$('#g-worker-direct-path').prop('checked', resp['worker.direct_path']);
-        }, this));
+        });
     },
 
     render: function () {
@@ -74,17 +77,17 @@ var ConfigView = View.extend({
                 list: JSON.stringify(settings)
             },
             error: null
-        }).done(_.bind(function (resp) {
+        }).done((resp) => {
             events.trigger('g:alert', {
                 icon: 'ok',
                 text: 'Settings saved.',
                 type: 'success',
                 timeout: 4000
             });
-        }, this)).fail(_.bind(function (resp) {
+        }).fail((resp) => {
             this.$('#g-worker-settings-error-message').text(
                 resp.responseJSON.message);
-        }, this));
+        });
     }
 });
 

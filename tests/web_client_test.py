@@ -17,6 +17,7 @@
 #  limitations under the License.
 ###############################################################################
 
+import mock
 import os
 import six
 import subprocess
@@ -38,10 +39,12 @@ from six.moves import range
 os.environ['GIRDER_PORT'] = os.environ.get('GIRDER_PORT', '30001')
 config.loadConfig()  # Reload config to pick up correct port
 testServer = None
+logprintMock = None
 
 
 def setUpModule():
     global testServer
+    global logprintMock
     mockS3 = False
     if 's3' in os.environ['ASSETSTORE_TYPE']:
         mockS3 = True
@@ -54,11 +57,15 @@ def setUpModule():
     plugins = os.environ.get('ENABLED_PLUGINS', '')
     if plugins:
         base.enabledPlugins.extend(plugins.split())
+
+    logprintMock = mock.patch('girder.utility.plugin_utilities.logprint')
+    logprintMock.start()
     testServer = base.startServer(False, mockS3=mockS3)
 
 
 def tearDownModule():
     base.stopServer()
+    logprintMock.stop()
 
 
 class WebClientTestEndpoints(Resource):
@@ -171,7 +178,7 @@ class WebClientTestCase(base.TestCase):
             baseUrl = os.environ['BASEURL']
 
         cmd = (
-            os.path.join(ROOT_DIR, 'node_modules', '.bin', 'phantomjs'),
+            'npx', 'phantomjs',
             '--web-security=%s' % self.webSecurity,
             os.path.join(ROOT_DIR, 'clients', 'web', 'test', 'specRunner.js'),
             'http://localhost:%s%s' % (os.environ['GIRDER_PORT'], baseUrl),
@@ -188,7 +195,8 @@ class WebClientTestCase(base.TestCase):
         retry_count = os.environ.get('PHANTOMJS_RETRY', 3)
         for _ in range(int(retry_count)):
             retry = False
-            task = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            task = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=ROOT_DIR)
             jasmineFinished = False
             for line in iter(task.stdout.readline, b''):
                 if isinstance(line, six.binary_type):
