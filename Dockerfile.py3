@@ -10,6 +10,7 @@ RUN apt-get -qqy update && apt-get install -qy software-properties-common python
   apt-get update -qqy && apt-get install -qy \
     build-essential \
     git \
+    vim \
     gosu \
     xsltproc \
     python3-cairo \
@@ -88,7 +89,9 @@ RUN wget -qO- $GCP_URL | tar xz -C /opt && \
   mv /opt/globusconnectpersonal-* /opt/globusconnectpersonal
 
 RUN groupadd -r girder \
-  && useradd --no-log-init -m -r -g girder girder \
+  && useradd --no-log-init -s /bin/bash -p $(date +%s | sha256sum | base64 | head -c 32 ; echo) \
+    -m -r -g girder girder \
+  && usermod -U girder \
   && chown girder:girder -R /girder
 
 ENV GOSU_USER=0:0
