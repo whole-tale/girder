@@ -89,8 +89,7 @@ RUN wget -qO- $GCP_URL | tar xz -C /opt && \
   mv /opt/globusconnectpersonal-* /opt/globusconnectpersonal
 
 RUN groupadd -r girder \
-  && useradd --no-log-init -s /bin/bash -p $(date +%s | sha256sum | base64 | head -c 32 ; echo) \
-    -m -r -g girder girder \
+  && useradd --no-log-init -s /bin/bash -p $(openssl rand -base64 32) -m -r -g girder girder \
   && usermod -U girder \
   && chown girder:girder -R /girder
 
