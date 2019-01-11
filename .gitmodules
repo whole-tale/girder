@@ -7,3 +7,6 @@
 [submodule "plugins/wt_home_dir"]
 	path = plugins/wt_home_dir
 	url = https://github.com/whole-tale/wt_home_dirs
+[submodule "plugins/globus_handler"]
+	path = plugins/globus_handler
+	url = https://github.com/whole-tale/globus_handler
