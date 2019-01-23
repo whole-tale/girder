@@ -64,7 +64,8 @@ RUN girder-install web --plugins=oauth,gravatar,jobs,worker,wt_data_manager,whol
 
 COPY girder.local.cfg.dev /girder/girder/conf/girder.local.cfg
 
-# Make girder-shell happy
+# See http://click.pocoo.org/5/python3/#python-3-surrogate-handling for more detail on
+# why this is necessary.
 ENV LC_ALL=C.UTF-8 LANG=C.UTF-8
 RUN python3 -m pip install ipython
 
@@ -77,11 +78,6 @@ RUN girder-worker-config set celery backend redis://redis/ && \
 RUN sed \
   -e 's/return decode(data/&.decode("utf-8")/' \
   -i /usr/local/lib/python3.5/dist-packages/kombu/serialization.py
-
-# See http://click.pocoo.org/5/python3/#python-3-surrogate-handling for more detail on
-# why this is necessary.
-ENV LC_ALL=C.UTF-8
-ENV LANG=C.UTF-8
 
 # install GCP client
 ENV GCP_URL=https://downloads.globus.org/globus-connect-personal/linux/stable/globusconnectpersonal-latest.tgz
