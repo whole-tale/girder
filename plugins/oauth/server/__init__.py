@@ -44,12 +44,14 @@ def validateIgnoreRegistrationPolicy(doc):
     constants.PluginSettings.LINKEDIN_CLIENT_ID,
     constants.PluginSettings.BITBUCKET_CLIENT_ID,
     constants.PluginSettings.BOX_CLIENT_ID,
+    constants.PluginSettings.DESIGNSAFE_CLIENT_ID,
     constants.PluginSettings.GOOGLE_CLIENT_SECRET,
     constants.PluginSettings.GLOBUS_CLIENT_SECRET,
     constants.PluginSettings.GITHUB_CLIENT_SECRET,
     constants.PluginSettings.LINKEDIN_CLIENT_SECRET,
     constants.PluginSettings.BITBUCKET_CLIENT_SECRET,
-    constants.PluginSettings.BOX_CLIENT_SECRET
+    constants.PluginSettings.BOX_CLIENT_SECRET,
+    constants.PluginSettings.DESIGNSAFE_CLIENT_SECRET
 })
 def validateOtherSettings(event):
     pass

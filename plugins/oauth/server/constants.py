@@ -40,3 +40,7 @@ class PluginSettings(object):
 
     BOX_CLIENT_ID = 'oauth.box_client_id'
     BOX_CLIENT_SECRET = 'oauth.box_client_secret'
+
+    DESIGNSAFE_CLIENT_ID = 'oauth.designsafe_client_id'
+    DESIGNSAFE_CLIENT_SECRET = 'oauth.designsafe_client_secret'
+
