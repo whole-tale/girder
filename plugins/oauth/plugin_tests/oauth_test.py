@@ -279,7 +279,7 @@ class OauthTest(base.TestCase):
         resp = self.request('/oauth/%s/callback' % providerInfo['id'], params=params)
         self.assertStatus(resp, 400)
         self.assertTrue(resp.json['message'].startswith('No redirect location'))
-
+	
         # Try callback, with incorrect code
         params = getCallbackParams(getProviderResp())
         params['code'] = 'something_wrong'
@@ -1493,3 +1493,169 @@ class OauthTest(base.TestCase):
             self.mockOtherRequest
         ):
             self._testOauth(providerInfo)
+
+    def testDesignSafeOauth(self):
+        providerInfo = {
+            'id': 'designsafe',
+            'name': 'DesignSafe',
+            'client_id': {
+                'key': PluginSettings.DESIGNSAFE_CLIENT_ID,
+                'value': 'designsafe_test_client_id'
+            },
+            'client_secret': {
+                'key': PluginSettings.DESIGNSAFE_CLIENT_SECRET,
+                'value': 'designsafe_test_client_secret'
+            },
+            'allowed_callback_re':
+                r'^http://127\.0\.0\.1(?::\d+)?/api/v1/oauth/designsafe/callback$',
+            'url_re': r'^https://agave\.designsafe-ci\.org/oauth2/authorize',
+            'accounts': {
+                'existing': {
+                    'auth_code': 'designsafe_existing_auth_code',
+                    'access_token': 'designsafe_existing_test_token',
+                    'user': {
+                        'login': self.adminUser['login'],
+                        'email': self.adminUser['email'],
+                        'firstName': self.adminUser['firstName'],
+                        'lastName': self.adminUser['lastName'],
+                        'oauth': {
+                            'provider': 'designsafe',
+                            'id': '2399'  # ????
+                        }
+                    }
+                },
+                'new': {
+                    'auth_code': 'designsafe_new_auth_code',
+                    'access_token': 'designsafe_new_test_token',
+                    'user': {
+                        # login may be provided externally by GitHub; for
+                        # simplicity here, do not use a username with whitespace
+                        # or underscores
+                        'login': 'drago',
+                        'email': 'metaphor@labs.ussr.gov',
+                        'firstName': 'Ivan',
+                        'lastName': 'Drago',
+                        'oauth': {
+                            'provider': 'designsafe',
+                            'id': 1985  # ????
+                        }
+                    }
+                }
+            }
+        }
+
+        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$',
+                          path='^/oauth2/authorize$', method='GET')
+        def mockDesignSafeRedirect(url, request):
+            redirectUri = None
+            try:
+                params = urllib.parse.parse_qs(url.query)
+                # Check redirect_uri first, so other errors can still redirect
+                redirectUri = params['redirect_uri'][0]
+                self.assertEqual(params['client_id'], [providerInfo['client_id']['value']])
+            except (KeyError, AssertionError) as e:
+                return {
+                    'status_code': 404,
+                    'content': json.dumps({
+                        'error': repr(e)
+                    })
+                }
+            try:
+                six.assertRegex(self, redirectUri, providerInfo['allowed_callback_re'])
+                state = params['state'][0]
+                # Nothing to test for state, since provider doesn't care
+                self.assertEqual(params['scope'], ['PRODUCTION'])
+            except (KeyError, AssertionError) as e:
+                returnQuery = urllib.parse.urlencode({
+                    'error': repr(e),
+                })
+            else:
+                returnQuery = urllib.parse.urlencode({
+                    'state': state,
+                    'code': providerInfo['accounts'][self.accountType]['auth_code']
+                })
+            return {
+                'status_code': 302,
+                'headers': {
+                    'Location': '%s?%s' % (redirectUri, returnQuery)
+                }
+            }
+
+        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$',
+                          path='^/oauth2/token$', method='POST')
+        def mockDesignSafeToken(url, request):
+            try:
+                self.assertEqual(request.headers['Accept'], 'application/json')
+                params = urllib.parse.parse_qs(request.body)
+                self.assertEqual(params['client_id'], [providerInfo['client_id']['value']])
+            except (KeyError, AssertionError) as e:
+                return {
+                    'status_code': 404,
+                    'content': json.dumps({
+                        'error': repr(e)
+                    })
+                }
+            try:
+                for account in six.viewvalues(providerInfo['accounts']):
+                    if account['auth_code'] == params['code'][0]:
+                        break
+                else:
+                    self.fail()
+                self.assertEqual(params['client_secret'], [providerInfo['client_secret']['value']])
+                six.assertRegex(
+                    self, params['redirect_uri'][0], providerInfo['allowed_callback_re'])
+            except (KeyError, AssertionError) as e:
+                returnBody = json.dumps({
+                    'error': repr(e),
+                    'error_description': repr(e)
+                })
+            else:
+                returnBody = json.dumps({
+                    'token_type': 'bearer',
+                    'access_token': account['access_token'],
+                    'scope': 'PRODUCTION'
+                })
+            return {
+                'status_code': 200,
+                'headers': {
+                    'Content-Type': 'application/json'
+                },
+                'content': returnBody
+            }
+
+        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$', path='^/profiles/v2/me$', method='GET')
+        def mockDesignSafeApiUser(url, request):
+            from pudb.remote import set_trace; set_trace(term_size=(160, 40), host='0.0.0.0', port=6900)
+            try:
+                for account in six.viewvalues(providerInfo['accounts']):
+                    if 'Bearer %s' % account['access_token'] == request.headers['Authorization']:
+                        break
+                else:
+                    self.fail()
+            except AssertionError as e:
+                return {
+                    'status_code': 401,
+                    'content': json.dumps({
+                        'message': repr(e)
+                    })
+                }
+            return json.dumps({
+                'result':{
+                    'uid': account['user']['oauth']['id'],
+                    'username': account['user']['login'],
+                    'first_name': account['user']['firstName'],
+                    'last_name': account['user']['lastName'],
+                    'email': account['user']['email'],
+                }
+            })
+
+        with httmock.HTTMock(
+            mockDesignSafeRedirect,
+            mockDesignSafeToken,
+            mockDesignSafeApiUser,
+            # Must keep 'mockOtherRequest' last
+            self.mockOtherRequest
+        ):
+            from pudb.remote import set_trace; set_trace(term_size=(160, 40), host='0.0.0.0', port=6900)
+            self._testOauth(providerInfo)
+
