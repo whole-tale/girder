@@ -88,6 +88,10 @@ var OAuthLoginView = View.extend({
         box: {
             icon: 'box',
             class: 'g-oauth-button-box'
+        },
+        designsafe: {
+            icon: 'beaker',
+            class: 'g-oauth-button-designsafe'
         }
     }
 });

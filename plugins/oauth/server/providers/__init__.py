@@ -25,6 +25,7 @@ from .github import GitHub
 from .linkedin import LinkedIn
 from .bitbucket import Bitbucket
 from .box import Box
+from .designsafe import DesignSafe
 
 
 def addProvider(provider):
@@ -40,3 +41,4 @@ addProvider(GitHub)
 addProvider(LinkedIn)
 addProvider(Bitbucket)
 addProvider(Box)
+addProvider(DesignSafe)

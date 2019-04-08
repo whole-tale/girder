@@ -1493,3 +1493,232 @@ class OauthTest(base.TestCase):
             self.mockOtherRequest
         ):
             self._testOauth(providerInfo)
+
+
+    def testDesignSafeOauth(self):  # noqa
+        providerInfo = {
+            'id': 'github',
+            'name': 'GitHub',
+            'client_id': {
+                'key': PluginSettings.DESIGNSAFE_CLIENT_ID,
+                'value': 'github_test_client_id'
+            },
+            'client_secret': {
+                'key': PluginSettings.DESIGNSAFE_CLIENT_SECRET,
+                'value': 'github_test_client_secret'
+            },
+            'allowed_callback_re':
+                r'^http://127\.0\.0\.1(?::\d+)?/api/v1/oauth/github/callback$',
+            'url_re': r'^https://github\.com/login/oauth/authorize',
+            'accounts': {
+                'existing': {
+                    'auth_code': 'github_existing_auth_code',
+                    'access_token': 'github_existing_test_token',
+                    'user': {
+                        'login': self.adminUser['login'],
+                        'email': self.adminUser['email'],
+                        'firstName': self.adminUser['firstName'],
+                        'lastName': self.adminUser['lastName'],
+                        'oauth': {
+                            'provider': 'github',
+                            'id': '2399'
+                        }
+                    }
+                },
+                'new': {
+                    'auth_code': 'github_new_auth_code',
+                    'access_token': 'github_new_test_token',
+                    'user': {
+                        # login may be provided externally by GitHub; for
+                        # simplicity here, do not use a username with whitespace
+                        # or underscores
+                        'login': 'drago',
+                        'email': 'metaphor@labs.ussr.gov',
+                        'firstName': 'Ivan',
+                        'lastName': 'Drago',
+                        'oauth': {
+                            'provider': 'github',
+                            'id': 1985
+                        }
+                    }
+                }
+            }
+        }
+
+        @httmock.urlmatch(scheme='https', netloc='^github.com$',
+                          path='^/login/oauth/authorize$', method='GET')
+        def mockGithubRedirect(url, request):
+            redirectUri = None
+            try:
+                params = urllib.parse.parse_qs(url.query)
+                # Check redirect_uri first, so other errors can still redirect
+                redirectUri = params['redirect_uri'][0]
+                self.assertEqual(params['client_id'], [providerInfo['client_id']['value']])
+            except (KeyError, AssertionError) as e:
+                return {
+                    'status_code': 404,
+                    'content': json.dumps({
+                        'error': repr(e)
+                    })
+                }
+            try:
+                six.assertRegex(self, redirectUri, providerInfo['allowed_callback_re'])
+                state = params['state'][0]
+                # Nothing to test for state, since provider doesn't care
+                self.assertEqual(params['scope'], ['user:email'])
+            except (KeyError, AssertionError) as e:
+                returnQuery = urllib.parse.urlencode({
+                    'error': repr(e),
+                })
+            else:
+                returnQuery = urllib.parse.urlencode({
+                    'state': state,
+                    'code': providerInfo['accounts'][self.accountType]['auth_code']
+                })
+            return {
+                'status_code': 302,
+                'headers': {
+                    'Location': '%s?%s' % (redirectUri, returnQuery)
+                }
+            }
+
+        @httmock.urlmatch(scheme='https', netloc='^github.com$',
+                          path='^/login/oauth/access_token$', method='POST')
+        def mockGithubToken(url, request):
+            try:
+                self.assertEqual(request.headers['Accept'], 'application/json')
+                params = urllib.parse.parse_qs(request.body)
+                self.assertEqual(params['client_id'], [providerInfo['client_id']['value']])
+            except (KeyError, AssertionError) as e:
+                return {
+                    'status_code': 404,
+                    'content': json.dumps({
+                        'error': repr(e)
+                    })
+                }
+            try:
+                for account in six.viewvalues(providerInfo['accounts']):
+                    if account['auth_code'] == params['code'][0]:
+                        break
+                else:
+                    self.fail()
+                self.assertEqual(params['client_secret'], [providerInfo['client_secret']['value']])
+                six.assertRegex(
+                    self, params['redirect_uri'][0], providerInfo['allowed_callback_re'])
+            except (KeyError, AssertionError) as e:
+                returnBody = json.dumps({
+                    'error': repr(e),
+                    'error_description': repr(e)
+                })
+            else:
+                returnBody = json.dumps({
+                    'token_type': 'bearer',
+                    'access_token': account['access_token'],
+                    'scope': 'user:email'
+                })
+            return {
+                'status_code': 200,
+                'headers': {
+                    'Content-Type': 'application/json'
+                },
+                'content': returnBody
+            }
+
+        @httmock.urlmatch(scheme='https', netloc='^api.github.com$', path='^/user$', method='GET')
+        def mockGithubApiUser(url, request):
+            try:
+                for account in six.viewvalues(providerInfo['accounts']):
+                    if 'token %s' % account['access_token'] == request.headers['Authorization']:
+                        break
+                else:
+                    self.fail()
+            except AssertionError as e:
+                return {
+                    'status_code': 401,
+                    'content': json.dumps({
+                        'message': repr(e)
+                    })
+                }
+            return json.dumps({
+                'id': account['user']['oauth']['id'],
+                'login': account['user']['login'],
+                'name': '%s %s' % (account['user']['firstName'], account['user']['lastName'])
+            })
+
+        @httmock.urlmatch(scheme='https', netloc='^api.github.com$',
+                          path='^/user/emails$', method='GET')
+        def mockGithubApiEmail(url, request):
+            try:
+                for account in six.viewvalues(providerInfo['accounts']):
+                    if 'token %s' % account['access_token'] == request.headers['Authorization']:
+                        break
+                else:
+                    self.fail()
+            except AssertionError as e:
+                return {
+                    'status_code': 401,
+                    'content': json.dumps({
+                        'message': repr(e)
+                    })
+                }
+            return json.dumps([
+                {
+                    'primary': False,
+                    'email': 'drago@siberia.ussr.gov',
+                    'verified': True
+                }, {
+                    'primary': True,
+                    'email': account['user']['email'],
+                    'verified': True
+                }
+            ])
+
+        with httmock.HTTMock(
+            mockGithubRedirect,
+            mockGithubToken,
+            mockGithubApiUser,
+            mockGithubApiEmail,
+            # Must keep 'mockOtherRequest' last
+            self.mockOtherRequest
+        ):
+            self._testOauth(providerInfo)
+
+        @httmock.urlmatch(scheme='https', netloc='^api.github.com$', path='^/user$', method='GET')
+        def mockGithubUserWithoutName(url, request):
+            try:
+                for account in six.viewvalues(providerInfo['accounts']):
+                    if 'token %s' % account['access_token'] == request.headers['Authorization']:
+                        break
+                else:
+                    self.fail()
+            except AssertionError as e:
+                return {
+                    'status_code': 401,
+                    'content': json.dumps({
+                        'message': repr(e)
+                    })
+                }
+            return json.dumps({
+                'id': account['user']['oauth']['id'],
+                'login': account['user']['login'],
+                'name': None
+            })
+
+        self.setUp()  # Call to reset everything so we can call _testOauth again
+
+        # If no name is provided, we expect to use the github login for both
+        providerInfo['accounts']['existing']['user']['lastName'] = 'rocky'
+        providerInfo['accounts']['existing']['user']['firstName'] = 'rocky'
+
+        providerInfo['accounts']['new']['user']['lastName'] = 'drago'
+        providerInfo['accounts']['new']['user']['firstName'] = 'drago'
+
+        with httmock.HTTMock(
+            mockGithubRedirect,
+            mockGithubToken,
+            mockGithubUserWithoutName,
+            mockGithubApiEmail,
+            # Must keep 'mockOtherRequest' last
+            self.mockOtherRequest
+        ):
+            self._testOauth(providerInfo)
