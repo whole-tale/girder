@@ -1494,40 +1494,39 @@ class OauthTest(base.TestCase):
         ):
             self._testOauth(providerInfo)
 
-
-    def testDesignSafeOauth(self):  # noqa
+    def testDesignSafeOauth(self):
         providerInfo = {
-            'id': 'github',
-            'name': 'GitHub',
+            'id': 'designsafe',
+            'name': 'DesignSafe',
             'client_id': {
                 'key': PluginSettings.DESIGNSAFE_CLIENT_ID,
-                'value': 'github_test_client_id'
+                'value': 'designsafe_test_client_id'
             },
             'client_secret': {
                 'key': PluginSettings.DESIGNSAFE_CLIENT_SECRET,
-                'value': 'github_test_client_secret'
+                'value': 'designsafe_test_client_secret'
             },
             'allowed_callback_re':
-                r'^http://127\.0\.0\.1(?::\d+)?/api/v1/oauth/github/callback$',
-            'url_re': r'^https://github\.com/login/oauth/authorize',
+                r'^http://127\.0\.0\.1(?::\d+)?/api/v1/oauth/designsafe/callback$',
+            'url_re': r'^https://agave\.designsafe-ci\.org/oauth2/authorize',
             'accounts': {
                 'existing': {
-                    'auth_code': 'github_existing_auth_code',
-                    'access_token': 'github_existing_test_token',
+                    'auth_code': 'designsafe_existing_auth_code',
+                    'access_token': 'designsafe_existing_test_token',
                     'user': {
                         'login': self.adminUser['login'],
                         'email': self.adminUser['email'],
                         'firstName': self.adminUser['firstName'],
                         'lastName': self.adminUser['lastName'],
                         'oauth': {
-                            'provider': 'github',
-                            'id': '2399'
+                            'provider': 'designsafe',
+                            'id': '2399'  # ????
                         }
                     }
                 },
                 'new': {
-                    'auth_code': 'github_new_auth_code',
-                    'access_token': 'github_new_test_token',
+                    'auth_code': 'designsafe_new_auth_code',
+                    'access_token': 'designsafe_new_test_token',
                     'user': {
                         # login may be provided externally by GitHub; for
                         # simplicity here, do not use a username with whitespace
@@ -1537,17 +1536,17 @@ class OauthTest(base.TestCase):
                         'firstName': 'Ivan',
                         'lastName': 'Drago',
                         'oauth': {
-                            'provider': 'github',
-                            'id': 1985
+                            'provider': 'designsafe',
+                            'id': 1985  # ????
                         }
                     }
                 }
             }
         }
 
-        @httmock.urlmatch(scheme='https', netloc='^github.com$',
-                          path='^/login/oauth/authorize$', method='GET')
-        def mockGithubRedirect(url, request):
+        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$',
+                          path='^/oauth2/authorize$', method='GET')
+        def mockDesignSafeRedirect(url, request):
             redirectUri = None
             try:
                 params = urllib.parse.parse_qs(url.query)
@@ -1582,9 +1581,9 @@ class OauthTest(base.TestCase):
                 }
             }
 
-        @httmock.urlmatch(scheme='https', netloc='^github.com$',
-                          path='^/login/oauth/access_token$', method='POST')
-        def mockGithubToken(url, request):
+        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$',
+                          path='^/oauth2/token$', method='POST')
+        def mockDesignSafeToken(url, request):
             try:
                 self.assertEqual(request.headers['Accept'], 'application/json')
                 params = urllib.parse.parse_qs(request.body)
@@ -1624,8 +1623,8 @@ class OauthTest(base.TestCase):
                 'content': returnBody
             }
 
-        @httmock.urlmatch(scheme='https', netloc='^api.github.com$', path='^/user$', method='GET')
-        def mockGithubApiUser(url, request):
+        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$', path='^/profiles/v2/me$', method='GET')
+        def mockDesignSafeApiUser(url, request):
             try:
                 for account in six.viewvalues(providerInfo['accounts']):
                     if 'token %s' % account['access_token'] == request.headers['Authorization']:
@@ -1645,9 +1644,9 @@ class OauthTest(base.TestCase):
                 'name': '%s %s' % (account['user']['firstName'], account['user']['lastName'])
             })
 
-        @httmock.urlmatch(scheme='https', netloc='^api.github.com$',
-                          path='^/user/emails$', method='GET')
-        def mockGithubApiEmail(url, request):
+        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$',
+                          path='^/profiles/v2/me$', method='GET')
+        def mockDesignSafeApiEmail(url, request):
             try:
                 for account in six.viewvalues(providerInfo['accounts']):
                     if 'token %s' % account['access_token'] == request.headers['Authorization']:
@@ -1674,17 +1673,17 @@ class OauthTest(base.TestCase):
             ])
 
         with httmock.HTTMock(
-            mockGithubRedirect,
-            mockGithubToken,
-            mockGithubApiUser,
-            mockGithubApiEmail,
+            mockDesignSafeRedirect,
+            mockDesignSafeToken,
+            mockDesignSafeApiUser,
+            mockDesignSafeApiEmail,
             # Must keep 'mockOtherRequest' last
             self.mockOtherRequest
         ):
             self._testOauth(providerInfo)
 
-        @httmock.urlmatch(scheme='https', netloc='^api.github.com$', path='^/user$', method='GET')
-        def mockGithubUserWithoutName(url, request):
+        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$', path='^/profiles/v2/me$', method='GET')
+        def mockDesignSafeUserWithoutName(url, request):
             try:
                 for account in six.viewvalues(providerInfo['accounts']):
                     if 'token %s' % account['access_token'] == request.headers['Authorization']:
@@ -1714,10 +1713,10 @@ class OauthTest(base.TestCase):
         providerInfo['accounts']['new']['user']['firstName'] = 'drago'
 
         with httmock.HTTMock(
-            mockGithubRedirect,
-            mockGithubToken,
-            mockGithubUserWithoutName,
-            mockGithubApiEmail,
+            mockDesignSafeRedirect,
+            mockDesignSafeToken,
+            mockDesignSafeUserWithoutName,
+            mockDesignSafeApiEmail,
             # Must keep 'mockOtherRequest' last
             self.mockOtherRequest
         ):
