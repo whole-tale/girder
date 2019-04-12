@@ -279,7 +279,7 @@ class OauthTest(base.TestCase):
         resp = self.request('/oauth/%s/callback' % providerInfo['id'], params=params)
         self.assertStatus(resp, 400)
         self.assertTrue(resp.json['message'].startswith('No redirect location'))
-
+	
         # Try callback, with incorrect code
         params = getCallbackParams(getProviderResp())
         params['code'] = 'something_wrong'
@@ -1564,7 +1564,7 @@ class OauthTest(base.TestCase):
                 six.assertRegex(self, redirectUri, providerInfo['allowed_callback_re'])
                 state = params['state'][0]
                 # Nothing to test for state, since provider doesn't care
-                self.assertEqual(params['scope'], ['user:email'])
+                self.assertEqual(params['scope'], ['PRODUCTION'])
             except (KeyError, AssertionError) as e:
                 returnQuery = urllib.parse.urlencode({
                     'error': repr(e),
@@ -1613,7 +1613,7 @@ class OauthTest(base.TestCase):
                 returnBody = json.dumps({
                     'token_type': 'bearer',
                     'access_token': account['access_token'],
-                    'scope': 'user:email'
+                    'scope': 'PRODUCTION'
                 })
             return {
                 'status_code': 200,
@@ -1625,9 +1625,10 @@ class OauthTest(base.TestCase):
 
         @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$', path='^/profiles/v2/me$', method='GET')
         def mockDesignSafeApiUser(url, request):
+            from pudb.remote import set_trace; set_trace(term_size=(160, 40), host='0.0.0.0', port=6900)
             try:
                 for account in six.viewvalues(providerInfo['accounts']):
-                    if 'token %s' % account['access_token'] == request.headers['Authorization']:
+                    if 'Bearer %s' % account['access_token'] == request.headers['Authorization']:
                         break
                 else:
                     self.fail()
@@ -1639,14 +1640,19 @@ class OauthTest(base.TestCase):
                     })
                 }
             return json.dumps({
-                'id': account['user']['oauth']['id'],
-                'login': account['user']['login'],
-                'name': '%s %s' % (account['user']['firstName'], account['user']['lastName'])
+                'result':{
+                    'uid': account['user']['oauth']['id'],
+                    'username': account['user']['login'],
+                    'first_name': account['user']['firstName'],
+                    'last_name': account['user']['lastName'],
+                    'email': account['user']['email'],
+                }
             })
 
         @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$',
                           path='^/profiles/v2/me$', method='GET')
         def mockDesignSafeApiEmail(url, request):
+            from pudb.remote import set_trace; set_trace(term_size=(160, 40), host='0.0.0.0', port=6900)
             try:
                 for account in six.viewvalues(providerInfo['accounts']):
                     if 'token %s' % account['access_token'] == request.headers['Authorization']:
@@ -1680,44 +1686,6 @@ class OauthTest(base.TestCase):
             # Must keep 'mockOtherRequest' last
             self.mockOtherRequest
         ):
+            from pudb.remote import set_trace; set_trace(term_size=(160, 40), host='0.0.0.0', port=6900)
             self._testOauth(providerInfo)
 
-        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$', path='^/profiles/v2/me$', method='GET')
-        def mockDesignSafeUserWithoutName(url, request):
-            try:
-                for account in six.viewvalues(providerInfo['accounts']):
-                    if 'token %s' % account['access_token'] == request.headers['Authorization']:
-                        break
-                else:
-                    self.fail()
-            except AssertionError as e:
-                return {
-                    'status_code': 401,
-                    'content': json.dumps({
-                        'message': repr(e)
-                    })
-                }
-            return json.dumps({
-                'id': account['user']['oauth']['id'],
-                'login': account['user']['login'],
-                'name': None
-            })
-
-        self.setUp()  # Call to reset everything so we can call _testOauth again
-
-        # If no name is provided, we expect to use the github login for both
-        providerInfo['accounts']['existing']['user']['lastName'] = 'rocky'
-        providerInfo['accounts']['existing']['user']['firstName'] = 'rocky'
-
-        providerInfo['accounts']['new']['user']['lastName'] = 'drago'
-        providerInfo['accounts']['new']['user']['firstName'] = 'drago'
-
-        with httmock.HTTMock(
-            mockDesignSafeRedirect,
-            mockDesignSafeToken,
-            mockDesignSafeUserWithoutName,
-            mockDesignSafeApiEmail,
-            # Must keep 'mockOtherRequest' last
-            self.mockOtherRequest
-        ):
-            self._testOauth(providerInfo)
