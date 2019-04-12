@@ -1649,40 +1649,10 @@ class OauthTest(base.TestCase):
                 }
             })
 
-        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$',
-                          path='^/profiles/v2/me$', method='GET')
-        def mockDesignSafeApiEmail(url, request):
-            from pudb.remote import set_trace; set_trace(term_size=(160, 40), host='0.0.0.0', port=6900)
-            try:
-                for account in six.viewvalues(providerInfo['accounts']):
-                    if 'token %s' % account['access_token'] == request.headers['Authorization']:
-                        break
-                else:
-                    self.fail()
-            except AssertionError as e:
-                return {
-                    'status_code': 401,
-                    'content': json.dumps({
-                        'message': repr(e)
-                    })
-                }
-            return json.dumps([
-                {
-                    'primary': False,
-                    'email': 'drago@siberia.ussr.gov',
-                    'verified': True
-                }, {
-                    'primary': True,
-                    'email': account['user']['email'],
-                    'verified': True
-                }
-            ])
-
         with httmock.HTTMock(
             mockDesignSafeRedirect,
             mockDesignSafeToken,
             mockDesignSafeApiUser,
-            mockDesignSafeApiEmail,
             # Must keep 'mockOtherRequest' last
             self.mockOtherRequest
         ):
