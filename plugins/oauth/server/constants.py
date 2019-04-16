@@ -44,3 +44,6 @@ class PluginSettings(object):
     DESIGNSAFE_CLIENT_ID = 'oauth.designsafe_client_id'
     DESIGNSAFE_CLIENT_SECRET = 'oauth.designsafe_client_secret'
 
+    CYVERSE_CLIENT_ID = 'oauth.cyverse_client_id'
+    CYVERSE_CLIENT_SECRET = 'oauth.cyverse_client_secret'
+

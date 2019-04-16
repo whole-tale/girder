@@ -101,6 +101,12 @@ var ConfigView = View.extend({
             icon: 'beaker',
             hasAuthorizedOrigins: false,
             instructions: 'Client IDs and secret keys are managed in the Agave...'
+        }, {
+            id: 'cyverse',
+            name: 'CyVerse',
+            icon: 'database',
+            hasAuthorizedOrigins: false,
+            instructions: 'Client IDs and secret keys are managed in the Agave...'
         }];
         this.providerIds = _.pluck(this.providers, 'id');
 

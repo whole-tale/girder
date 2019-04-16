@@ -92,6 +92,10 @@ var OAuthLoginView = View.extend({
         designsafe: {
             icon: 'beaker',
             class: 'g-oauth-button-designsafe'
+        },
+        cyverse: {
+            icon: 'database',
+            class: 'g-oauth-button-cyverse'
         }
     }
 });
