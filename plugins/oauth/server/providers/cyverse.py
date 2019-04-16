@@ -22,18 +22,18 @@ from .agavebase import AgaveBase
 from .. import constants
 
 
-class DesignSafe(AgaveBase):
-    _AUTH_URL = 'https://agave.designsafe-ci.org/oauth2/authorize'
-    _TOKEN_URL = 'https://agave.designsafe-ci.org/oauth2/token'
-    _API_USER_URL = 'https://agave.designsafe-ci.org/profiles/v2/me'
-    _NAME = 'DesignSafe'
+class CyVerse(AgaveBase):
+    _AUTH_URL = 'https://agave.iplantc.org/oauth2/authorize'
+    _TOKEN_URL = 'https://agave.iplantc.org/oauth2/token'
+    _API_USER_URL = 'https://agave.iplantc.org/profiles/v2/me'
+    _NAME = 'CyVerse'
 
     @staticmethod
     def getClientId():
-        return Setting().get(constants.PluginSettings.DESIGNSAFE_CLIENT_ID)
+        return Setting().get(constants.PluginSettings.CYVERSE_CLIENT_ID)
 
     def getClientIdSetting(self):
-        return Setting().get(constants.PluginSettings.DESIGNSAFE_CLIENT_ID)
+        return Setting().get(constants.PluginSettings.CYVERSE_CLIENT_ID)
 
     def getClientSecretSetting(self):
-        return Setting().get(constants.PluginSettings.DESIGNSAFE_CLIENT_SECRET)
+        return Setting().get(constants.PluginSettings.CYVERSE_CLIENT_SECRET)

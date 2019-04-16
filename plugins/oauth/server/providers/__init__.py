@@ -26,6 +26,7 @@ from .linkedin import LinkedIn
 from .bitbucket import Bitbucket
 from .box import Box
 from .designsafe import DesignSafe
+from .cyverse import CyVerse
 
 
 def addProvider(provider):
@@ -42,3 +43,4 @@ addProvider(LinkedIn)
 addProvider(Bitbucket)
 addProvider(Box)
 addProvider(DesignSafe)
+addProvider(CyVerse)
