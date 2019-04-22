@@ -1778,7 +1778,6 @@ class OauthTest(base.TestCase):
 
         @httmock.urlmatch(scheme='https', netloc='^agave.iplantc.org$', path='^/profiles/v2/me$', method='GET')
         def mockCyVerseApiUser(url, request):
-            from pudb.remote import set_trace; set_trace(term_size=(160, 40), host='0.0.0.0', port=6900)
             try:
                 for account in six.viewvalues(providerInfo['accounts']):
                     if 'Bearer %s' % account['access_token'] == request.headers['Authorization']:
@@ -1809,5 +1808,4 @@ class OauthTest(base.TestCase):
             # Must keep 'mockOtherRequest' last
             self.mockOtherRequest
         ):
-            from pudb.remote import set_trace; set_trace(term_size=(160, 40), host='0.0.0.0', port=6900)
             self._testOauth(providerInfo)
