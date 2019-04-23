@@ -35,7 +35,6 @@ class AgaveBase(ProviderBase):
 
     @classmethod
     def getUrl(cls, state):
-        # from pudb.remote import set_trace; set_trace(term_size=(160, 40), host='0.0.0.0', port=6900)
         clientId = cls.getClientId()
 
         if clientId is None:
@@ -54,7 +53,6 @@ class AgaveBase(ProviderBase):
         return '%s?%s' % (cls._AUTH_URL, query)
 
     def getToken(self, code):
-        # from pudb.remote import set_trace; set_trace(term_size=(160, 40), host='0.0.0.0', port=6900)
         params = {
             'code': code,
             'client_id': self.clientId,
@@ -73,7 +71,6 @@ class AgaveBase(ProviderBase):
         return resp
 
     def getUser(self, token):
-        # from pudb.remote import set_trace; set_trace(term_size=(160, 40), host='0.0.0.0', port=6900)
         headers = {
             'Authorization': 'Bearer %s' % token['access_token'],
             'Accept': 'application/json'
