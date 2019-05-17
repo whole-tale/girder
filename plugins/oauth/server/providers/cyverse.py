@@ -17,30 +17,23 @@
 #  limitations under the License.
 ###############################################################################
 
-import collections
-
-from .google import Google
-from .globus import Globus
-from .github import GitHub
-from .linkedin import LinkedIn
-from .bitbucket import Bitbucket
-from .box import Box
-from .designsafe import DesignSafe
-from .cyverse import CyVerse
+from girder.models.setting import Setting
+from .agavebase import AgaveBase
+from .. import constants
 
 
-def addProvider(provider):
-    idMap[provider.getProviderName()] = provider
+class CyVerse(AgaveBase):
+    _AUTH_URL = 'https://agave.iplantc.org/oauth2/authorize'
+    _TOKEN_URL = 'https://agave.iplantc.org/oauth2/token'
+    _API_USER_URL = 'https://agave.iplantc.org/profiles/v2/me'
+    _NAME = 'CyVerse'
 
+    @staticmethod
+    def getClientId():
+        return Setting().get(constants.PluginSettings.CYVERSE_CLIENT_ID)
 
-idMap = collections.OrderedDict()
+    def getClientIdSetting(self):
+        return Setting().get(constants.PluginSettings.CYVERSE_CLIENT_ID)
 
-
-addProvider(Google)
-addProvider(Globus)
-addProvider(GitHub)
-addProvider(LinkedIn)
-addProvider(Bitbucket)
-addProvider(Box)
-addProvider(DesignSafe)
-addProvider(CyVerse)
+    def getClientSecretSetting(self):
+        return Setting().get(constants.PluginSettings.CYVERSE_CLIENT_SECRET)
