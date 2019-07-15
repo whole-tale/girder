@@ -111,7 +111,11 @@ class Description(object):
             self._responses['200'] = {
                 'description': 'Success'
             }
-        if self._responseClass is not None:
+        if self._responseClass is 'string':
+            self._responses['200']['schema'] = {
+                'type': 'string'
+            }
+        elif self._responseClass is not None:
             schema = {
                 '$ref': '#/definitions/%s' % self._responseClass
             }
@@ -120,7 +124,7 @@ class Description(object):
                     'type': 'array',
                     'items': schema
                 }
-            self._responses['200']['schema'] = schema
+#            self._responses['200']['schema'] = schema
 
         resp = {
             'summary': self._summary,
@@ -243,15 +247,18 @@ class Description(object):
             'required': required
         }
 
-        if dataType == 'string':
-            param['_strip'] = strip
-            param['_lower'] = lower
-            param['_upper'] = upper
+        #if dataType == 'string':
+        #    param['_strip'] = strip
+        #    param['_lower'] = lower
+        #    param['_upper'] = upper
 
         if paramType == 'body':
-            param['schema'] = {
-                '$ref': '#/definitions/%s' % dataType
-            }
+            if dataType == 'string':
+                param['type'] = 'string'
+            else:
+                param['schema'] = {
+                    '$ref': '#/definitions/%s' % dataType
+                }
         else:
             param['type'] = dataType
 
@@ -773,12 +780,12 @@ class autoDescribeRoute(describeRoute):  # noqa: class name
         return doc
 
     def _handleString(self, name, descParam, value):
-        if descParam['_strip']:
-            value = value.strip()
-        if descParam['_lower']:
-            value = value.lower()
-        if descParam['_upper']:
-            value = value.upper()
+        #if descParam['_strip']:
+        #    value = value.strip()
+        #if descParam['_lower']:
+        #    value = value.lower()
+        #if descParam['_upper']:
+        #    value = value.upper()
 
         format = descParam.get('format')
         if format in ('date', 'date-time'):
