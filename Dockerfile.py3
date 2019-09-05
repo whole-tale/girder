@@ -18,6 +18,7 @@ RUN apt-get -qqy update && apt-get install -qy software-properties-common python
     python3-gi-cairo \
     libcairo2 libcairo2-dev libcairo-gobject2 \
     libffi-dev \
+    libfuse-dev \
     libsasl2-dev \
     libssl-dev \
     libldap2-dev \

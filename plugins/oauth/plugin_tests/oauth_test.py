@@ -1493,3 +1493,319 @@ class OauthTest(base.TestCase):
             self.mockOtherRequest
         ):
             self._testOauth(providerInfo)
+
+    def testDesignSafeOauth(self):
+        providerInfo = {
+            'id': 'designsafe',
+            'name': 'DesignSafe',
+            'client_id': {
+                'key': PluginSettings.DESIGNSAFE_CLIENT_ID,
+                'value': 'designsafe_test_client_id'
+            },
+            'client_secret': {
+                'key': PluginSettings.DESIGNSAFE_CLIENT_SECRET,
+                'value': 'designsafe_test_client_secret'
+            },
+            'allowed_callback_re':
+                r'^http://127\.0\.0\.1(?::\d+)?/api/v1/oauth/designsafe/callback$',
+            'url_re': r'^https://agave\.designsafe-ci\.org/oauth2/authorize',
+            'accounts': {
+                'existing': {
+                    'auth_code': 'designsafe_existing_auth_code',
+                    'access_token': 'designsafe_existing_test_token',
+                    'user': {
+                        'login': self.adminUser['login'],
+                        'email': self.adminUser['email'],
+                        'firstName': self.adminUser['firstName'],
+                        'lastName': self.adminUser['lastName'],
+                        'oauth': {
+                            'provider': 'designsafe',
+                            'id': '2399'
+                        }
+                    }
+                },
+                'new': {
+                    'auth_code': 'designsafe_new_auth_code',
+                    'access_token': 'designsafe_new_test_token',
+                    'user': {
+                        'login': 'drago',
+                        'email': 'metaphor@labs.ussr.gov',
+                        'firstName': 'Ivan',
+                        'lastName': 'Drago',
+                        'oauth': {
+                            'provider': 'designsafe',
+                            'id': 1985
+                        }
+                    }
+                }
+            }
+        }
+
+        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$',
+                          path='^/oauth2/authorize$', method='GET')
+        def mockDesignSafeRedirect(url, request):
+            redirectUri = None
+            try:
+                params = urllib.parse.parse_qs(url.query)
+                redirectUri = params['redirect_uri'][0]
+                self.assertEqual(params['client_id'], [providerInfo['client_id']['value']])
+            except (KeyError, AssertionError) as e:
+                return {
+                    'status_code': 404,
+                    'content': json.dumps({
+                        'error': repr(e)
+                    })
+                }
+            try:
+                six.assertRegex(self, redirectUri, providerInfo['allowed_callback_re'])
+                state = params['state'][0]
+                self.assertEqual(params['scope'], ['PRODUCTION'])
+            except (KeyError, AssertionError) as e:
+                returnQuery = urllib.parse.urlencode({
+                    'error': repr(e),
+                })
+            else:
+                returnQuery = urllib.parse.urlencode({
+                    'state': state,
+                    'code': providerInfo['accounts'][self.accountType]['auth_code']
+                })
+            return {
+                'status_code': 302,
+                'headers': {
+                    'Location': '%s?%s' % (redirectUri, returnQuery)
+                }
+            }
+
+        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$',
+                          path='^/oauth2/token$', method='POST')
+        def mockDesignSafeToken(url, request):
+            try:
+                self.assertEqual(request.headers['Accept'], 'application/json')
+                params = urllib.parse.parse_qs(request.body)
+                self.assertEqual(params['client_id'], [providerInfo['client_id']['value']])
+            except (KeyError, AssertionError) as e:
+                return {
+                    'status_code': 404,
+                    'content': json.dumps({
+                        'error': repr(e)
+                    })
+                }
+            try:
+                for account in six.viewvalues(providerInfo['accounts']):
+                    if account['auth_code'] == params['code'][0]:
+                        break
+                else:
+                    self.fail()
+                self.assertEqual(params['client_secret'], [providerInfo['client_secret']['value']])
+                six.assertRegex(
+                    self, params['redirect_uri'][0], providerInfo['allowed_callback_re'])
+            except (KeyError, AssertionError) as e:
+                returnBody = json.dumps({
+                    'error': repr(e),
+                    'error_description': repr(e)
+                })
+            else:
+                returnBody = json.dumps({
+                    'token_type': 'bearer',
+                    'access_token': account['access_token'],
+                    'scope': 'PRODUCTION'
+                })
+            return {
+                'status_code': 200,
+                'headers': {
+                    'Content-Type': 'application/json'
+                },
+                'content': returnBody
+            }
+
+        @httmock.urlmatch(scheme='https', netloc='^agave.designsafe-ci.org$', path='^/profiles/v2/me$', method='GET')
+        def mockDesignSafeApiUser(url, request):
+            try:
+                for account in six.viewvalues(providerInfo['accounts']):
+                    if 'Bearer %s' % account['access_token'] == request.headers['Authorization']:
+                        break
+                else:
+                    self.fail()
+            except AssertionError as e:
+                return {
+                    'status_code': 401,
+                    'content': json.dumps({
+                        'message': repr(e)
+                    })
+                }
+            return json.dumps({
+                'result':{
+                    'uid': account['user']['oauth']['id'],
+                    'username': account['user']['login'],
+                    'first_name': account['user']['firstName'],
+                    'last_name': account['user']['lastName'],
+                    'email': account['user']['email'],
+                }
+            })
+
+        with httmock.HTTMock(
+            mockDesignSafeRedirect,
+            mockDesignSafeToken,
+            mockDesignSafeApiUser,
+            # Must keep 'mockOtherRequest' last
+            self.mockOtherRequest
+        ):
+            self._testOauth(providerInfo)
+
+    def testCyVerseOauth(self):
+        providerInfo = {
+            'id': 'cyverse',
+            'name': 'CyVerse',
+            'client_id': {
+                'key': PluginSettings.CYVERSE_CLIENT_ID,
+                'value': 'cyverse_test_client_id'
+            },
+            'client_secret': {
+                'key': PluginSettings.CYVERSE_CLIENT_SECRET,
+                'value': 'cyverse_test_client_secret'
+            },
+            'allowed_callback_re':
+                r'^http://127\.0\.0\.1(?::\d+)?/api/v1/oauth/cyverse/callback$',
+            'url_re': r'^https://agave\.iplantc\.org/oauth2/authorize',
+            'accounts': {
+                'existing': {
+                    'auth_code': 'cyverse_existing_auth_code',
+                    'access_token': 'cyverse_existing_test_token',
+                    'user': {
+                        'login': self.adminUser['login'],
+                        'email': self.adminUser['email'],
+                        'firstName': self.adminUser['firstName'],
+                        'lastName': self.adminUser['lastName'],
+                        'oauth': {
+                            'provider': 'cyverse',
+                            'id': '2399'
+                        }
+                    }
+                },
+                'new': {
+                    'auth_code': 'cyverse_new_auth_code',
+                    'access_token': 'cyverse_new_test_token',
+                    'user': {
+                        'login': 'drago',
+                        'email': 'metaphor@labs.ussr.gov',
+                        'firstName': 'Ivan',
+                        'lastName': 'Drago',
+                        'oauth': {
+                            'provider': 'cyverse',
+                            'id': 1985
+                        }
+                    }
+                }
+            }
+        }
+
+        @httmock.urlmatch(scheme='https', netloc='^agave.iplantc.org$',
+                          path='^/oauth2/authorize$', method='GET')
+        def mockCyVerseRedirect(url, request):
+            redirectUri = None
+            try:
+                params = urllib.parse.parse_qs(url.query)
+                redirectUri = params['redirect_uri'][0]
+                self.assertEqual(params['client_id'], [providerInfo['client_id']['value']])
+            except (KeyError, AssertionError) as e:
+                return {
+                    'status_code': 404,
+                    'content': json.dumps({
+                        'error': repr(e)
+                    })
+                }
+            try:
+                six.assertRegex(self, redirectUri, providerInfo['allowed_callback_re'])
+                state = params['state'][0]
+                self.assertEqual(params['scope'], ['PRODUCTION'])
+            except (KeyError, AssertionError) as e:
+                returnQuery = urllib.parse.urlencode({
+                    'error': repr(e),
+                })
+            else:
+                returnQuery = urllib.parse.urlencode({
+                    'state': state,
+                    'code': providerInfo['accounts'][self.accountType]['auth_code']
+                })
+            return {
+                'status_code': 302,
+                'headers': {
+                    'Location': '%s?%s' % (redirectUri, returnQuery)
+                }
+            }
+
+        @httmock.urlmatch(scheme='https', netloc='^agave.iplantc.org$',
+                          path='^/oauth2/token$', method='POST')
+        def mockCyVerseToken(url, request):
+            try:
+                self.assertEqual(request.headers['Accept'], 'application/json')
+                params = urllib.parse.parse_qs(request.body)
+                self.assertEqual(params['client_id'], [providerInfo['client_id']['value']])
+            except (KeyError, AssertionError) as e:
+                return {
+                    'status_code': 404,
+                    'content': json.dumps({
+                        'error': repr(e)
+                    })
+                }
+            try:
+                for account in six.viewvalues(providerInfo['accounts']):
+                    if account['auth_code'] == params['code'][0]:
+                        break
+                else:
+                    self.fail()
+                self.assertEqual(params['client_secret'], [providerInfo['client_secret']['value']])
+                six.assertRegex(
+                    self, params['redirect_uri'][0], providerInfo['allowed_callback_re'])
+            except (KeyError, AssertionError) as e:
+                returnBody = json.dumps({
+                    'error': repr(e),
+                    'error_description': repr(e)
+                })
+            else:
+                returnBody = json.dumps({
+                    'token_type': 'bearer',
+                    'access_token': account['access_token'],
+                    'scope': 'PRODUCTION'
+                })
+            return {
+                'status_code': 200,
+                'headers': {
+                    'Content-Type': 'application/json'
+                },
+                'content': returnBody
+            }
+
+        @httmock.urlmatch(scheme='https', netloc='^agave.iplantc.org$', path='^/profiles/v2/me$', method='GET')
+        def mockCyVerseApiUser(url, request):
+            try:
+                for account in six.viewvalues(providerInfo['accounts']):
+                    if 'Bearer %s' % account['access_token'] == request.headers['Authorization']:
+                        break
+                else:
+                    self.fail()
+            except AssertionError as e:
+                return {
+                    'status_code': 401,
+                    'content': json.dumps({
+                        'message': repr(e)
+                    })
+                }
+            return json.dumps({
+                'result':{
+                    'uid': account['user']['oauth']['id'],
+                    'username': account['user']['login'],
+                    'first_name': account['user']['firstName'],
+                    'last_name': account['user']['lastName'],
+                    'email': account['user']['email'],
+                }
+            })
+
+        with httmock.HTTMock(
+            mockCyVerseRedirect,
+            mockCyVerseToken,
+            mockCyVerseApiUser,
+            # Must keep 'mockOtherRequest' last
+            self.mockOtherRequest
+        ):
+            self._testOauth(providerInfo)
