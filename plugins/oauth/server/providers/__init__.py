@@ -25,6 +25,7 @@ from .github import GitHub
 from .linkedin import LinkedIn
 from .bitbucket import Bitbucket
 from .box import Box
+from .orcid import ORCID
 from .designsafe import DesignSafe
 from .cyverse import CyVerse
 
@@ -42,5 +43,6 @@ addProvider(GitHub)
 addProvider(LinkedIn)
 addProvider(Bitbucket)
 addProvider(Box)
+addProvider(ORCID)
 addProvider(DesignSafe)
 addProvider(CyVerse)

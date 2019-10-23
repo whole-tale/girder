@@ -41,9 +41,11 @@ class PluginSettings(object):
     BOX_CLIENT_ID = 'oauth.box_client_id'
     BOX_CLIENT_SECRET = 'oauth.box_client_secret'
 
+    ORCID_CLIENT_ID = 'oauth.orcid_client_id'
+    ORCID_CLIENT_SECRET = 'oauth.orcid_client_secret'
+
     DESIGNSAFE_CLIENT_ID = 'oauth.designsafe_client_id'
     DESIGNSAFE_CLIENT_SECRET = 'oauth.designsafe_client_secret'
 
     CYVERSE_CLIENT_ID = 'oauth.cyverse_client_id'
     CYVERSE_CLIENT_SECRET = 'oauth.cyverse_client_secret'
-
