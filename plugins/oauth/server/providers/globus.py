@@ -97,9 +97,4 @@ class Globus(ProviderBase):
         firstName = name[0]
         lastName = name[-1]
 
-        user = self._createOrReuseUser(oauthId, email, firstName, lastName)
-        # save Globus token so that it can be used to access Globus services
-        user['otherTokens'] = token.get('other_tokens')
-        self.model('user').save(user)
-        return user
-
+        return self._createOrReuseUser(oauthId, email, firstName, lastName)
