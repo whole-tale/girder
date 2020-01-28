@@ -44,6 +44,7 @@ def validateIgnoreRegistrationPolicy(doc):
     constants.PluginSettings.LINKEDIN_CLIENT_ID,
     constants.PluginSettings.BITBUCKET_CLIENT_ID,
     constants.PluginSettings.BOX_CLIENT_ID,
+    constants.PluginSettings.ORCID_CLIENT_ID,
     constants.PluginSettings.DESIGNSAFE_CLIENT_ID,
     constants.PluginSettings.CYVERSE_CLIENT_ID,
     constants.PluginSettings.GOOGLE_CLIENT_SECRET,
@@ -52,6 +53,7 @@ def validateIgnoreRegistrationPolicy(doc):
     constants.PluginSettings.LINKEDIN_CLIENT_SECRET,
     constants.PluginSettings.BITBUCKET_CLIENT_SECRET,
     constants.PluginSettings.BOX_CLIENT_SECRET,
+    constants.PluginSettings.ORCID_CLIENT_SECRET,
     constants.PluginSettings.DESIGNSAFE_CLIENT_SECRET,
     constants.PluginSettings.CYVERSE_CLIENT_SECRET,
 })

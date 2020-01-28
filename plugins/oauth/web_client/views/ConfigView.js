@@ -96,6 +96,14 @@ var ConfigView = View.extend({
                           'Developer Services page. When creating your client ID ' +
                           'there, use the following as the authorization callback URL:'
         }, {
+            id: 'orcid',
+            name: 'ORCID',
+            icon: 'orcid',
+            hasAuthorizedOrigins: false,
+            instructions: 'Client IDs and secret keys are managed in the ORCID. ' +
+                          'When creating your client ID there, ' +
+                          'use the following values:'
+        }, {
             id: 'designsafe',
             name: 'DesignSafe',
             icon: 'beaker',
