@@ -10,3 +10,9 @@
 [submodule "plugins/globus_handler"]
 	path = plugins/globus_handler
 	url = https://github.com/whole-tale/globus_handler
+[submodule "plugins/virtual_resources"]
+	path = plugins/virtual_resources
+	url = https://github.com/whole-tale/virtual_resources
+[submodule "plugins/wt_versioning"]
+	path = plugins/wt_versioning
+	url = https://github.com/whole-tale/wt_versioning
