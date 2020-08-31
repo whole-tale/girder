@@ -1,4 +1,4 @@
-FROM node:8-stretch
+FROM node:8-buster
 MAINTAINER Kitware, Inc. <kitware@kitware.com>
 
 EXPOSE 8080
@@ -50,16 +50,14 @@ COPY package.json /girder/package.json
 COPY README.rst /girder/README.rst
 COPY plugins /girder/plugins
 
-#  -r plugins/wt_sils/requirements.txt \
 RUN python3 -m pip install --no-cache-dir -q \
   -r plugins/wholetale/requirements.txt \
-  -r plugins/wt_home_dir/requirements.txt \
-  -r plugins/wt_data_manager/requirements.txt \
-  -e .[plugins,sftp]
+  -e .[plugins,sftp]   # Most of the plugins is grabbed via plugins/.gitignore
 RUN python3 -m pip install -U pyOpenSSL
 ENV NPM_CONFIG_LOGLEVEL=warn NPM_CONFIG_COLOR=false NPM_CONFIG_PROGRESS=false
-RUN girder-install web --plugins=oauth,gravatar,jobs,worker,wt_data_manager,wholetale,wt_home_dir && \
-  rm -rf /root/.npm /tmp/npm* /girder/node_modules
+RUN girder-install web \
+  --plugins=oauth,gravatar,jobs,worker,wt_data_manager,wholetale,wt_home_dir,virtual_resources,wt_versioning \
+  && rm -rf /root/.npm /tmp/npm* /girder/node_modules
 
 # RUN python3 -c "import nltk; nltk.download('wordnet')"
 # RUN python3 -m spacy download en
@@ -78,7 +76,7 @@ RUN girder-worker-config set celery backend redis://redis/ && \
 # Temporary fix for kombu
 RUN sed \
   -e 's/return decode(data/&.decode("utf-8")/' \
-  -i /usr/local/lib/python3.5/dist-packages/kombu/serialization.py
+  -i /usr/local/lib/python3.7/dist-packages/kombu/serialization.py
 
 # install GCP client
 ENV GCP_URL=https://downloads.globus.org/globus-connect-personal/linux/stable/globusconnectpersonal-latest.tgz

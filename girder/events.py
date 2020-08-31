@@ -60,7 +60,7 @@ class Event(object):
 
     # We might have a lot of events, so we use __slots__ to make them smaller
     __slots__ = (
-        'async',
+        '_async',
         'info',
         'name',
         'propagate',
@@ -69,14 +69,14 @@ class Event(object):
         'currentHandlerName'
     )
 
-    def __init__(self, name, info, async=False):
+    def __init__(self, name, info, _async=False):
         self.name = name
         self.info = info
         self.propagate = True
         self.defaultPrevented = False
         self.responses = []
         self.currentHandlerName = None
-        self.async = async
+        self._async = _async
 
     def preventDefault(self):
         """
@@ -125,9 +125,9 @@ class ForegroundEventsDaemon(object):
 
     def trigger(self, eventName=None, info=None, callback=None):
         if eventName is None:
-            event = Event(None, info, async=False)
+            event = Event(None, info, _async=False)
         else:
-            event = trigger(eventName, info, async=False, daemon=True)
+            event = trigger(eventName, info, _async=False, daemon=True)
 
         if callable(callback):
             callback(event)
@@ -159,9 +159,9 @@ class AsyncEventsThread(threading.Thread):
             try:
                 eventName, info, callback = self.eventQueue.get(block=False)
                 if eventName is None:
-                    event = Event(None, info, async=True)
+                    event = Event(None, info, _async=True)
                 else:
-                    event = trigger(eventName, info, async=True, daemon=True)
+                    event = trigger(eventName, info, _async=True, daemon=True)
 
                 if callable(callback):
                     callback(event)
@@ -280,7 +280,7 @@ def bound(eventName, handlerName, handler):
         unbind(eventName, handlerName)
 
 
-def trigger(eventName, info=None, pre=None, async=False, daemon=False):
+def trigger(eventName, info=None, pre=None, _async=False, daemon=False):
     """
     Fire an event with the given name. All listeners bound on that name will be
     called until they are exhausted or one of the handlers calls the
@@ -295,15 +295,15 @@ def trigger(eventName, info=None, pre=None, async=False, daemon=False):
         "info" key (the info arg to this function), and "eventName" and
         "handlerName" values.
     :type pre: function or None
-    :param async: Whether this event is executing on the background thread
+    :param _async: Whether this event is executing on the background thread
         (True) or on the request thread (False).
-    :type async: bool
+    :type _async: bool
     :param daemon: Whether this was triggered via ``girder.events.daemon``.
     :type daemon: bool
     """
-    e = Event(eventName, info, async=async)
+    e = Event(eventName, info, _async=_async)
     for handler in _mapping.get(eventName, ()):
-        if daemon and not async:
+        if daemon and not _async:
             girder.logprint.warning(
                 'WARNING: Handler "%s" for event "%s" was triggered on the daemon, but is '
                 'actually running synchronously.' % (handler['name'], eventName))
