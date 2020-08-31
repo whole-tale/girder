@@ -49,6 +49,7 @@ COPY setup.py /girder/setup.py
 COPY package.json /girder/package.json
 COPY README.rst /girder/README.rst
 COPY plugins /girder/plugins
+COPY pytest_girder /girder/pytest_girder
 
 RUN python3 -m pip install -U setuptools==49.6.0   # 50.0.0 breaks entrypoints
 RUN python3 -m pip install --no-cache-dir -q \
