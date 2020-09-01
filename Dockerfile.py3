@@ -23,6 +23,7 @@ RUN apt-get -qqy update && apt-get install -qy software-properties-common python
     libssl-dev \
     libldap2-dev \
     libpango1.0-dev \
+    libmagic1 \
     gir1.2-pango-1.0 \
     gir1.2-rsvg-2.0 \
     libpython3-dev && \
