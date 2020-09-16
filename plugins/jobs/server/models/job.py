@@ -200,7 +200,7 @@ class Job(AccessControlledModel):
         return self.save(job)
 
     def createJob(self, title, type, args=(), kwargs=None, user=None, when=None,
-                  interval=0, public=False, handler=None, async=False,
+                  interval=0, public=False, handler=None, _async=False,
                   save=True, parentJob=None, otherFields=None):
         """
         Create a new job record.
@@ -228,9 +228,9 @@ class Job(AccessControlledModel):
         :param externalToken: If an external token was created for updating this
         job, pass it in and it will have the job-specific scope set.
         :type externalToken: token (dict) or None.
-        :param async: Whether the job is to be run asynchronously. For now this
+        :param _async: Whether the job is to be run asynchronously. For now this
             only applies to jobs that are scheduled to run locally.
-        :type async: bool
+        :type _async: bool
         :param save: Whether the documented should be saved to the database.
         :type save: bool
         :param parentJob: The job which will be set as a parent
@@ -264,7 +264,7 @@ class Job(AccessControlledModel):
             'log': [],
             'meta': {},
             'handler': handler,
-            'async': async,
+            'async': _async,
             'timestamps': [],
             'parentId': parentId
         }
