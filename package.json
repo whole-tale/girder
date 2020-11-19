@@ -18,6 +18,7 @@
     "dependencies": {
         "babel-core": "^6.25.0",
         "babel-loader": "^7.1.1",
+        "babel-polyfill": "^6.26.0",
         "babel-preset-env": "^1.6.1",
         "colors": "^1.1.2",
         "css-loader": "^0.26.1",
@@ -25,7 +26,6 @@
         "extract-text-webpack-plugin": "^2.1.2",
         "file-loader": "^0.11.2",
         "girder": "file:./clients/web/src",
-        "google-fonts-webpack-plugin": "^0.4.0",
         "grunt": "^1.0.1",
         "grunt-cli": "^1.2.0",
         "grunt-contrib-copy": "^1.0.0",
@@ -47,7 +47,7 @@
         "swagger-ui": "~2.2.10",
         "toposort": "^1.0.3",
         "uglifyjs-webpack-plugin": "^1.1.6",
-        "underscore": "^1.8.3",
+        "underscore": "~1.8.3",
         "webpack": "^2.7.0"
     },
     "devDependencies": {
@@ -140,6 +140,7 @@
     },
     "eslintIgnore": [
         "build/",
+        "clients/web/src/node_modules/",
         "clients/web/static/built/",
         "clients/web/test/lib/",
         "plugins/*/web_client/extra/"
