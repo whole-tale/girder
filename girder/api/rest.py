@@ -1175,6 +1175,9 @@ class Resource(ModelImporter):
 
         if Setting().get(SettingKey.SECURE_COOKIE):
             cookie['girderToken']['secure'] = True
+        domain = Setting().get(SettingKey.COOKIE_DOMAIN)
+        if domain:
+            cookie['girderToken']['domain'] = domain
 
         return token
 

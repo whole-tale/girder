@@ -167,6 +167,7 @@ class SettingKey(object):
     PRIVACY_NOTICE = 'core.privacy_notice'
     CONTACT_EMAIL_ADDRESS = 'core.contact_email_address'
     COOKIE_LIFETIME = 'core.cookie_lifetime'
+    COOKIE_DOMAIN = 'core.cookie_domain'
     CORS_ALLOW_HEADERS = 'core.cors.allow_headers'
     CORS_ALLOW_METHODS = 'core.cors.allow_methods'
     CORS_ALLOW_ORIGIN = 'core.cors.allow_origin'
@@ -209,6 +210,7 @@ class SettingDefault(object):
         SettingKey.CONTACT_EMAIL_ADDRESS: 'kitware@kitware.com',
         SettingKey.PRIVACY_NOTICE: 'https://www.kitware.com/privacy',
         SettingKey.COOKIE_LIFETIME: 180,
+        SettingKey.COOKIE_DOMAIN: None,
         # These headers are necessary to allow the web server to work with just
         # changes to the CORS origin
         SettingKey.CORS_ALLOW_HEADERS:

@@ -212,6 +212,11 @@ class Setting(Model):
         return config.getConfig()['server']['mode'] == 'production'
 
     @staticmethod
+    @setting_utilities.validator(SettingKey.COOKIE_DOMAIN)
+    def validateCookieDomain(doc):
+        pass
+
+    @staticmethod
     @setting_utilities.validator(SettingKey.PLUGINS_ENABLED)
     def validateCorePluginsEnabled(doc):
         """
