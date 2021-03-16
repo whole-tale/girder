@@ -17,10 +17,10 @@
 #  limitations under the License.
 ###############################################################################
 
-import cgi
 import cherrypy
 import collections
 import datetime
+import html
 import inspect
 import json
 import posixpath
@@ -527,7 +527,7 @@ def _createResponse(val):
         elif accept.value == 'text/html':
             # Pretty-print and HTML-ify the response for the browser
             setResponseHeader('Content-Type', 'text/html')
-            resp = cgi.escape(json.dumps(
+            resp = html.escape(json.dumps(
                 val, indent=4, sort_keys=True, allow_nan=False, separators=(',', ': '),
                 cls=JsonEncoder))
             resp = resp.replace(' ', '&nbsp;').replace('\n', '<br />')
