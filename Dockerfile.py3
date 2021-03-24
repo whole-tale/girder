@@ -8,6 +8,7 @@ ENV GPG_KEY E3FF2839C048B25C084DEBE9B26995E310250568
 
 RUN apt-get update -qqy && \
   apt-get install -y --no-install-recommends \
+    cmake \
     build-essential \
     git \
     vim \
