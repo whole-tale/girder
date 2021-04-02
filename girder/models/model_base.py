@@ -333,7 +333,7 @@ class Model(ModelImporter):
 
         return cursor
 
-    def findOne(self, query=None, fields=None, **kwargs):
+    def findOne(self, query=None, fields=None, sort=None, **kwargs):
         """
         Search the collection by a set of parameters. Passes any kwargs
         through to the underlying pymongo.collection.find_one function.
@@ -352,7 +352,7 @@ class Model(ModelImporter):
         """
         query = query or {}
         kwargs = {k: kwargs[k] for k in kwargs if k in _allowedFindArgs}
-        return self.collection.find_one(query, projection=fields, **kwargs)
+        return self.collection.find_one(query, projection=fields, sort=sort, **kwargs)
 
     def _textSearchFilters(self, query, filters=None, fields=None):
         """

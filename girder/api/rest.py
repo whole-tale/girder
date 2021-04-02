@@ -17,10 +17,10 @@
 #  limitations under the License.
 ###############################################################################
 
-import cgi
 import cherrypy
 import collections
 import datetime
+import html
 import inspect
 import json
 import posixpath
@@ -527,7 +527,7 @@ def _createResponse(val):
         elif accept.value == 'text/html':
             # Pretty-print and HTML-ify the response for the browser
             setResponseHeader('Content-Type', 'text/html')
-            resp = cgi.escape(json.dumps(
+            resp = html.escape(json.dumps(
                 val, indent=4, sort_keys=True, allow_nan=False, separators=(',', ': '),
                 cls=JsonEncoder))
             resp = resp.replace(' ', '&nbsp;').replace('\n', '<br />')
@@ -664,12 +664,15 @@ def endpoint(fun):
             # These are unexpected failures; send a 500 status
             logger.exception('500 Error')
             cherrypy.response.status = 500
-            t, value, tb = sys.exc_info()
-            val = {'message': '%s: %s' % (t.__name__, repr(value)),
-                   'type': 'internal'}
-            curConfig = config.getConfig()
-            if curConfig['server']['mode'] != 'production':
-                # Unless we are in production mode, send a traceback too
+            val = dict(type='internal')
+
+            if config.getConfig()['server']['mode'] == 'production':
+                # Sanitize errors in production mode
+                val['message'] = 'An unexpected error occurred on the server.'
+            else:
+                # Provide error details in non-production modes
+                t, value, tb = sys.exc_info()
+                val['message'] = '%s: %s' % (t.__name__, repr(value))
                 val['trace'] = traceback.extract_tb(tb)
 
         resp = _createResponse(val)
@@ -1172,6 +1175,9 @@ class Resource(ModelImporter):
 
         if Setting().get(SettingKey.SECURE_COOKIE):
             cookie['girderToken']['secure'] = True
+        domain = Setting().get(SettingKey.COOKIE_DOMAIN)
+        if domain:
+            cookie['girderToken']['domain'] = domain
 
         return token
 

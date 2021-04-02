@@ -119,7 +119,7 @@ class Setting(Model):
         setting = self._get(key)
 
         if setting is None:
-            if default is '__default__':
+            if default == '__default__':
                 default = self.getDefault(key)
             return default
         else:
@@ -210,6 +210,11 @@ class Setting(Model):
     @setting_utilities.default(SettingKey.SECURE_COOKIE)
     def defaultSecureCookie():
         return config.getConfig()['server']['mode'] == 'production'
+
+    @staticmethod
+    @setting_utilities.validator(SettingKey.COOKIE_DOMAIN)
+    def validateCookieDomain(doc):
+        pass
 
     @staticmethod
     @setting_utilities.validator(SettingKey.PLUGINS_ENABLED)

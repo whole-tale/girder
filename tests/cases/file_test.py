@@ -44,6 +44,14 @@ from girder.utility.filesystem_assetstore_adapter import DEFAULT_PERMS
 from girder.utility.s3_assetstore_adapter import makeBotoConnectParams, S3AssetstoreAdapter
 from six.moves import urllib
 
+# The latest moto/boto/botocore requires dummy credentials to function.  It is unclear if
+# this is a bug or intended behavior.
+#  https://github.com/spulec/moto/issues/1793#issuecomment-431459262
+#  https://github.com/spulec/moto/issues/1924
+os.environ['AWS_ACCESS_KEY_ID'] = "access"
+os.environ['AWS_SECRET_ACCESS_KEY'] = "secret"
+os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
+
 
 def setUpModule():
     base.startServer()
@@ -870,11 +878,11 @@ class FileTestCase(base.TestCase):
     @moto.mock_s3
     def testS3Assetstore(self):
         botoParams = makeBotoConnectParams('access', 'secret')
-        mock_s3.createBucket(botoParams, 'b')
+        mock_s3.createBucket(botoParams, 'bname')
 
         Assetstore().remove(Assetstore().getCurrent())
         assetstore = Assetstore().createS3Assetstore(
-            name='test', bucket='b', accessKeyId='access', secret='secret',
+            name='test', bucket='bname', accessKeyId='access', secret='secret',
             prefix='test')
         self.assetstore = assetstore
 
@@ -922,15 +930,15 @@ class FileTestCase(base.TestCase):
             S3, however we now no longer use the boto API to do so internally,
             and must mock this out at the level of requests.
             """
-            if url.netloc != 's3.amazonaws.com':
+            if url.netloc != 'bname.s3.amazonaws.com':
                 raise Exception('Unexpected request to host ' + url.netloc)
 
             body = request.body.read(65536)  # sufficient for now, we have short bodies
 
             # Actually set the key in moto
-            self.assertEqual(url.path[:3], '/b/')
+            self.assertTrue(url.path.startswith('/test/'))
             client = boto3.client('s3')
-            client.put_object(Bucket='b', Key=url.path[3:], Body=body)
+            client.put_object(Bucket='bname', Key=url.path[1:], Body=body)
 
             return {
                 'status_code': 200
@@ -977,7 +985,7 @@ class FileTestCase(base.TestCase):
         self.assertStatusOk(resp)
 
         # Make sure our metadata got updated in S3
-        obj = boto3.client('s3').get_object(Bucket='b', Key=file['s3Key'])
+        obj = boto3.client('s3').get_object(Bucket='bname', Key=file['s3Key'])
         self.assertEqual(obj['ContentDisposition'], 'attachment; filename="new name"')
         self.assertEqual(obj['ContentType'], 'application/csv')
 
@@ -1040,7 +1048,7 @@ class FileTestCase(base.TestCase):
         file = File().load(file['_id'], force=True)
 
         # Mock Serve range requests
-        @httmock.urlmatch(netloc=r'^s3.amazonaws.com')
+        @httmock.urlmatch(netloc=r'^bname.s3.amazonaws.com')
         def s3_range_mock(url, request):
             data = chunk1 + chunk2
             if request.headers.get('range', '').startswith('bytes='):
@@ -1094,10 +1102,14 @@ class FileTestCase(base.TestCase):
         extracted = zip.read('Private/My Link Item').decode('utf8')
         self.assertEqual(extracted, params['linkUrl'].strip())
 
+        # The file should report no assetstore adapter
+        fileDoc = File().load(file['_id'], force=True)
+        self.assertIsNone(File().getAssetstoreAdapter(fileDoc))
+
     def tearDown(self):
         if self.testForFinalizeUpload:
             self.assertTrue(self.finalizeUploadBeforeCalled)
             self.assertTrue(self.finalizeUploadAfterCalled)
 
-            events.unbind('model.file.finalizeUpload.before', '_testFinalizeUploadBefore')
-            events.unbind('model.file.finalizeUpload.after', '_testFinalizeUploadAfter')
+        events.unbind('model.file.finalizeUpload.before', '_testFinalizeUploadBefore')
+        events.unbind('model.file.finalizeUpload.after', '_testFinalizeUploadAfter')

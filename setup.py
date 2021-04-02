@@ -61,24 +61,21 @@ with open('README.rst') as f:
 installReqs = [
     'boto3',
     'botocore',
-    # CherryPy version is restricted due to a bug in versions >=11.1
-    # https://github.com/cherrypy/cherrypy/issues/1662
-    'CherryPy<11.1',
+    'CherryPy',
     'click',
     'click-plugins',
     'dogpile.cache',
     'filelock',
-    'funcsigs ; python_version < \'3\'',
     'jsonschema',
     'Mako',
     'passlib [bcrypt,totp]',
     'pymongo>=3.5',
     'PyYAML',
     'psutil',
-    'python-dateutil<2.7',  # required for compatibility with botocore=1.9.8
+    'pyOpenSSL',
+    'python-dateutil',
     'pytz',
     'requests',
-    'shutilwhich ; python_version < \'3\'',
     'six>=1.9',
 ]
 

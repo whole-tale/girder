@@ -13,12 +13,12 @@
   </acknowledgements>
   <parameters>
     <label>Parameters</label>
-    <image type="scalar">
-      <longflag>InputImage</longflag>
-      <label>InputImage</label>
+    <file type="scalar">
+      <longflag>InputFile</longflag>
+      <label>InputFile</label>
       <channel>input</channel>
-      <description>Input image to be analysed.</description>
-    </image>
+      <description>Input file to be analysed.</description>
+    </file>
     <integer-enumeration>
       <longflag>SpheresPerPhantom</longflag>
       <label>SpheresPerPhantom</label>
@@ -82,5 +82,11 @@
       <channel>output</channel>
       <description>Fiducial points, one for each detected sphere. Will be multiple of 3.</description>
     </pointfile>
+    <directory>
+      <longflag>OutputDirectory</longflag>
+      <label>OutputDirectory</label>
+      <channel>output</channel>
+      <description>Test output directory argument</description>
+    </directory>
   </parameters>
 </executable>
