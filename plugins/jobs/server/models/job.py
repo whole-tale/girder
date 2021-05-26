@@ -380,6 +380,7 @@ class Job(AccessControlledModel):
                 'log': log,
                 'overwrite': overwrite,
                 'status': status,
+                'progressCurrent': progressCurrent,
                 'progressTotal': progressTotal,
                 'progressMessage': progressMessage,
                 'otherFields': otherFields
