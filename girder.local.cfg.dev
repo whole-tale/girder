@@ -2,6 +2,8 @@
 server.socket_host = "0.0.0.0"
 server.socket_port = 8080
 server.thread_pool = 100
+server.max_request_header_size = 512000  # default
+server.max_request_body_size = 2097152000  # 2Gb
 tools.proxy.on = True
 
 [database]
