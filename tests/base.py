@@ -47,7 +47,6 @@ from girder.models.setting import Setting
 from girder.models.token import Token
 from girder.api.rest import setContentDisposition
 from . import mock_smtp
-from . import mock_s3
 from . import mongo_replicaset
 
 with warnings.catch_warnings():
@@ -92,10 +91,6 @@ def startServer(mock=True, mockS3=False):
     cherrypy.config.update({'request.throw_errors': True})
 
     mockSmtp.start()
-    if mockS3:
-        global mockS3Server
-        mockS3Server = mock_s3.startMockS3Server()
-
     return server
 
 

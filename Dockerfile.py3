@@ -74,9 +74,9 @@ RUN set -ex \
 	&& ldconfig
 
 # install GCP client
-ENV GCP_URL=https://downloads.globus.org/globus-connect-personal/linux/stable/globusconnectpersonal-latest.tgz
-RUN wget -qO- $GCP_URL | tar xz -C /opt && \
-  mv /opt/globusconnectpersonal-* /opt/globusconnectpersonal
+# ENV GCP_URL=https://downloads.globus.org/globus-connect-personal/linux/stable/globusconnectpersonal-latest.tgz
+ENV GCP_URL=https://github.com/whole-tale/globus_handler/releases/download/gcp-3.0.4/globusconnectpersonal-3.0.4.tar.gz
+RUN wget -qO- $GCP_URL | tar xz -C /opt 
 
 RUN groupadd -r girder \
   && useradd --no-log-init -s /bin/bash -p $(openssl rand -base64 32) -m -r -g girder girder \
