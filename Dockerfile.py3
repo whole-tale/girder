@@ -78,8 +78,9 @@ RUN set -ex \
 ENV GCP_URL=https://github.com/whole-tale/globus_handler/releases/download/gcp-3.0.4/globusconnectpersonal-3.0.4.tar.gz
 RUN wget -qO- $GCP_URL | tar xz -C /opt 
 
-RUN groupadd -r girder \
-  && useradd --no-log-init -s /bin/bash -p $(openssl rand -base64 32) -m -r -g girder girder \
+RUN userdel node \
+  && groupadd -g 1000 girder \
+  && useradd -u 1000 -g 1000 --no-log-init -s /bin/bash -p $(openssl rand -base64 32) -m -r girder \
   && usermod -U girder
 
 COPY --chown=girder:girder . /girder/
