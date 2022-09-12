@@ -90,7 +90,7 @@ RUN virtualenv -p /usr/local/bin/python3.9 /girder/venv
 ENV VIRTUAL_ENV=/girder/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-RUN python -m pip install --no-cache-dir -q \
+RUN python -m pip install --no-cache-dir \
   -r plugins/wholetale/requirements.txt \
   -e .[plugins,sftp]   # Most of the plugins is grabbed via plugins/.gitignore
 RUN python -m pip install --no-cache-dir -U pyOpenSSL
