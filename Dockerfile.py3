@@ -35,7 +35,7 @@ RUN apt-get update -qqy && \
 # install GCP client
 # ENV GCP_URL=https://downloads.globus.org/globus-connect-personal/linux/stable/globusconnectpersonal-latest.tgz
 ENV GCP_URL=https://github.com/whole-tale/globus_handler/releases/download/gcp-3.0.4/globusconnectpersonal-3.0.4.tar.gz
-RUN wget -qO- $GCP_URL | tar xz -C /opt 
+RUN wget -qO- $GCP_URL | tar xvz -C /opt 
 
 RUN userdel node \
   && groupadd -g 1000 girder \
