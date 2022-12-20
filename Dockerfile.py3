@@ -1,18 +1,15 @@
-FROM node:12-buster
+FROM node:12-bullseye
 MAINTAINER Kacper Kowalik <xarthisius.kk@gmail.com>
 
 EXPOSE 8080
-
-ENV PYTHON_VERSION 3.9.5
-ENV GPG_KEY E3FF2839C048B25C084DEBE9B26995E310250568
 
 RUN apt-get update -qqy && \
   apt-get install -y --no-install-recommends \
     cmake \
     build-essential \
     git \
-    vim \
     gosu \
+    vim \
     zlib1g-dev \
     libncurses5-dev \
     libgdbm-dev \
@@ -35,48 +32,10 @@ RUN apt-get update -qqy && \
     libbz2-dev && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN set -ex \
-  \
-  && cd /tmp \
-	&& wget -O python.tar.xz "https://www.python.org/ftp/python/${PYTHON_VERSION%%[a-z]*}/Python-$PYTHON_VERSION.tar.xz" \
-	&& wget -O python.tar.xz.asc "https://www.python.org/ftp/python/${PYTHON_VERSION%%[a-z]*}/Python-$PYTHON_VERSION.tar.xz.asc" \
-	&& export GNUPGHOME="$(mktemp -d)" \
-	&& gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys "$GPG_KEY" \
-	&& gpg --batch --verify python.tar.xz.asc python.tar.xz \
-	&& { command -v gpgconf > /dev/null && gpgconf --kill all || :; } \
-	&& rm -rf "$GNUPGHOME" python.tar.xz.asc \
-	&& mkdir -p /usr/src/python \
-	&& tar -xJC /usr/src/python --strip-components=1 -f python.tar.xz \
-	&& rm python.tar.xz \
-	\
-	&& cd /usr/src/python \
-	&& gnuArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)" \
-	&& ./configure \
-		--build="$gnuArch" \
-		--enable-loadable-sqlite-extensions \
-		--enable-optimizations \
-		--enable-option-checking=fatal \
-		--enable-shared \
-		--with-system-expat \
-		--with-system-ffi \
-		--without-ensurepip \
-	&& make -j "$(nproc)" \
-	&& make altinstall \
-  && cd /tmp \
-	&& rm -rf /usr/src/python \
-	\
-	&& find /usr/local -depth \
-		\( \
-			\( -type d -a \( -name test -o -name tests -o -name idle_test \) \) \
-			-o \( -type f -a \( -name '*.pyc' -o -name '*.pyo' -o -name '*.a' \) \) \
-		\) -exec rm -rf '{}' + \
-	\
-	&& ldconfig
-
 # install GCP client
 # ENV GCP_URL=https://downloads.globus.org/globus-connect-personal/linux/stable/globusconnectpersonal-latest.tgz
 ENV GCP_URL=https://github.com/whole-tale/globus_handler/releases/download/gcp-3.0.4/globusconnectpersonal-3.0.4.tar.gz
-RUN wget -qO- $GCP_URL | tar xz -C /opt 
+RUN wget -qO- $GCP_URL | tar xvz -C /opt 
 
 RUN userdel node \
   && groupadd -g 1000 girder \
@@ -86,11 +45,11 @@ RUN userdel node \
 COPY --chown=girder:girder . /girder/
 WORKDIR /girder
 
-RUN virtualenv -p /usr/local/bin/python3.9 /girder/venv
+RUN virtualenv -p /usr/bin/python3.9 /girder/venv
 ENV VIRTUAL_ENV=/girder/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-RUN python -m pip install --no-cache-dir -q \
+RUN python -m pip install --no-cache-dir \
   -r plugins/wholetale/requirements.txt \
   -e .[plugins,sftp]   # Most of the plugins is grabbed via plugins/.gitignore
 RUN python -m pip install --no-cache-dir -U pyOpenSSL
