@@ -38,7 +38,6 @@ ENV GCP_URL=https://github.com/whole-tale/globus_handler/releases/download/gcp-3
 RUN wget -qO- $GCP_URL | tar xz -C /opt
 # Update GCP certs
 RUN wget -qO- $GCP_LATEST | tar xz -C /tmp \
-  && rm -rf /opt/globusconnectpersonal/etc/ca/* \
   && cd /tmp//globusconnectpersonal* \
   && mv etc/ca/* /opt/globusconnectpersonal/etc/ca/ \
   && rm -rf /tmp/globusconnectpersonal*
