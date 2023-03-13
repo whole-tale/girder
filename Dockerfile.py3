@@ -74,6 +74,9 @@ RUN girder-worker-config set celery backend redis://redis/ && \
   girder-worker-config set celery broker redis://redis/ && \
   girder-worker-config set girder_worker tmp_root /tmp
 
+RUN sed -i ${VIRTUAL_ENV}/lib/python3.9/site-packages/girder_worker/task.py \
+  -e "/serializer/ s/girder_io/json/"
+
 ENV GOSU_USER=0:0
 COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
