@@ -23,7 +23,7 @@ import six
 
 from girder import events
 from girder.constants import AccessType
-from girder.exceptions import RestException
+from girder.exceptions import AccessException, RestException
 from girder.api.describe import Description, autoDescribeRoute
 from girder.api.rest import Resource
 from girder.api import access
@@ -142,7 +142,12 @@ class OAuth(Resource):
             raise cherrypy.HTTPRedirect(redirect)
 
         user = providerObj.getUser(token)
-        User().verifyLogin(user)
+        try:
+            User().verifyLogin(user)
+        except AccessException as exc:
+            if exc.extra == "accountApproval":
+                raise cherrypy.HTTPRedirect("/approvalPending")
+            raise
 
         event = events.trigger('oauth.auth_callback.after', {
             'provider': provider,
