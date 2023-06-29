@@ -16,12 +16,16 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 ###############################################################################
+import os
+
 
 from girder import events
-from girder.constants import SettingDefault, SortDir
+from girder.constants import SettingDefault, SettingKey, SortDir
 from girder.exceptions import ValidationException
 from girder.models.user import User
+from girder.models.setting import Setting
 from girder.utility import setting_utilities
+from girder.utility.webroot import WebrootBase
 from . import rest, constants, providers
 
 
@@ -81,6 +85,16 @@ def checkOauthUser(event):
             'password reset link.' % prettyProviderNames)
 
 
+class ApprovalPending(WebrootBase):
+    """Serves up 401 error."""
+    def __init__(self, template_path):
+        super().__init__(template_path)
+
+        self.vars = {
+            "brandName": Setting().get(SettingKey.BRAND_NAME),
+        }
+
+
 def load(info):
     User().ensureIndex((
         (('oauth.provider', SortDir.ASCENDING),
@@ -92,3 +106,5 @@ def load(info):
     info['apiRoot'].oauth = rest.OAuth()
 
     SettingDefault.defaults[constants.PluginSettings.PROVIDERS_ENABLED] = []
+    template_path = os.path.join(info["pluginRootDir"], "server", "approval_pending.mako")
+    info["serverRoot"].approvalPending = ApprovalPending(template_path)
