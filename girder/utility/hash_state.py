@@ -1,30 +1,13 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
-###############################################################################
-#  Copyright 2013 Kitware Inc.
-#
-#  Licensed under the Apache License, Version 2.0 ( the "License" );
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-###############################################################################
-
 # Utility for saving and restoring the internal state of a hash object
 # so that checksums can be streamed without having to remain in memory.
 # Inspired by http://code.activestate.com/recipes/
 # 578479-save-and-restore-sha-512-internal-state/
 
-import hashlib
-import ctypes
 import binascii
+import ctypes
+import hashlib
+import ssl
 import sys
 
 _ver = sys.version_info
@@ -33,6 +16,7 @@ _HASHLIB_INLINE_EVP_STRUCT = _ver < (2, 7, 13) or (_ver >= (3,) and _ver < (3, 5
 # EVPObject.  It changed for Python 3.8 in
 # https://github.com/python/cpython/pull/16023
 _HASHLIB_EVP_STRUCT_OFFSET = 3 if _ver < (3, 8) else 2
+
 
 def _getHashStateDataPointer(hashObject):
     """
@@ -81,7 +65,12 @@ def _getHashStateDataPointer(hashObject):
         # https://github.com/python/cpython/commit/9d9615f6782be4b1f38b47d4d56cee208c26a970
         evpStruct = ctypes.cast(hashPointer[_HASHLIB_EVP_STRUCT_OFFSET],
                                 ctypes.POINTER(ctypes.c_void_p))
-        stateDataPointer = ctypes.cast(evpStruct[3], ctypes.POINTER(ctypes.c_char))
+        if ssl._OPENSSL_API_VERSION < (3, 0):
+            # OpenSSL 1.x
+            stateDataPointer = ctypes.cast(evpStruct[3], ctypes.POINTER(ctypes.c_char))
+        else:
+            # OpenSSL 3.x
+            stateDataPointer = ctypes.cast(evpStruct[7], ctypes.POINTER(ctypes.c_char))
 
     assert stateDataPointer
     return stateDataPointer
@@ -90,7 +79,7 @@ def _getHashStateDataPointer(hashObject):
 _HASH_INFOS = dict()
 
 
-class _HashInfo(object):
+class _HashInfo:
     def __init__(self, type, stateSize, initVectorFirstWord):
         self.type = type
         self.stateSize = stateSize
