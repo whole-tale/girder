@@ -18,9 +18,9 @@ fi
 # If GOSU_USER environment variable set to something other than 0:0 (root:root),
 # become user:group set within and exec command passed in args
 if [ "$GOSU_USER" != "0:0" ]; then
-    groupadd -g $DOCKER_GROUP docker
-    gpasswd -a girder docker
-    usermod -g $GOSU_GID girder
+    groupadd -g $DOCKER_GROUP docker || /bin/true
+    gpasswd -a girder docker || /bin/true
+    usermod -g $GOSU_GID girder || /bin/true
     exec gosu $GOSU_UID "$@"
 fi
 

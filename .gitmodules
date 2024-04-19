@@ -16,3 +16,9 @@
 [submodule "plugins/wt_versioning"]
 	path = plugins/wt_versioning
 	url = https://github.com/whole-tale/wt_versioning
+[submodule "plugins/sem_viewer"]
+	path = plugins/sem_viewer
+	url = https://github.com/htmdec/sem_viewer
+[submodule "plugins/table_view"]
+	path = plugins/table_view
+	url = https://github.com/htmdec/table_view

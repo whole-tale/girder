@@ -7,10 +7,8 @@ server.max_request_body_size = 2097152000  # 2Gb
 tools.proxy.on = True
 
 [database]
-uri = "mongodb://mongo1:27017,mongo2:27017,mongo3:27017/girder"
-replica_set = "rs1"
-readPreference = "primaryPreferred"
-w = "majority"
+uri = "mongodb://mongodb:27017/girder"
+replica_set = None
 
 [server]
 mode = "development"
