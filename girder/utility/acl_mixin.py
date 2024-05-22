@@ -42,6 +42,18 @@ class AccessControlMixin(object):
     """
     resourceColl = None
     resourceParent = None
+    _parentModel = None
+
+    @property
+    def parentModel(self):
+        if not self._parentModel:
+            if isinstance(self.resourceColl, (list, tuple)):
+                self._parentModel = self.model(*self.resourceColl)
+            elif isinstance(self.resourceColl, str):
+                self._parentModel = self.model(self.resourceColl)
+            else:
+                raise Exception('Invalid model type: %s' % str(self.resourceColl))
+        return self._parentModel
 
     def load(self, id, level=AccessType.ADMIN, user=None, objectId=True,
              force=False, fields=None, exc=False):
@@ -71,7 +83,7 @@ class AccessControlMixin(object):
                 loadId = doc.get('attachedToId')
             if isinstance(loadType, six.string_types):
                 self.model(loadType).load(loadId, level=level, user=user, exc=exc)
-            elif isinstance(loadType, list) and len(loadType) == 2:
+            elif isinstance(loadType, (list, tuple)) and len(loadType) == 2:
                 self.model(*loadType).load(loadId, level=level, user=user, exc=exc)
             else:
                 raise Exception('Invalid model type: %s' % str(loadType))
@@ -88,9 +100,8 @@ class AccessControlMixin(object):
         Takes the same parameters as
         :py:func:`girder.models.model_base.AccessControlledModel.hasAccess`.
         """
-        resource = self.model(self.resourceColl) \
-                       .load(resource[self.resourceParent], force=True)
-        return self.model(self.resourceColl).hasAccess(
+        resource = self.parentModel.load(resource[self.resourceParent], force=True)
+        return self.parentModel.hasAccess(
             resource, user=user, level=level)
 
     def hasAccessFlags(self, doc, user=None, flags=None):
@@ -100,8 +111,8 @@ class AccessControlMixin(object):
         if not flags:
             return True
 
-        resource = self.model(self.resourceColl).load(doc[self.resourceParent], force=True)
-        return self.model(self.resourceColl).hasAccessFlags(resource, user, flags)
+        resource = self.parentModel.load(doc[self.resourceParent], force=True)
+        return self.parentModel.hasAccessFlags(resource, user, flags)
 
     def requireAccess(self, doc, user=None, level=AccessType.READ):
         """
@@ -132,8 +143,8 @@ class AccessControlMixin(object):
         if not flags:
             return
 
-        resource = self.model(self.resourceColl).load(doc[self.resourceParent], force=True)
-        return self.model(self.resourceColl).requireAccessFlags(resource, user, flags)
+        resource = self.parentModel.load(doc[self.resourceParent], force=True)
+        return self.parentModel.requireAccessFlags(resource, user, flags)
 
     def filterResultsByPermission(self, cursor, user, level, limit=0, offset=0,
                                   removeKeys=(), flags=None):
@@ -156,13 +167,11 @@ class AccessControlMixin(object):
 
             # if the resourceId is not cached, check for permission "level"
             # and set the cache
-            resource = self.model(self.resourceColl).load(resourceId, force=True)
-            val = self.model(self.resourceColl).hasAccess(
-                resource, user=user, level=level)
+            resource = self.parentModel.load(resourceId, force=True)
+            val = self.parentModel.hasAccess(resource, user=user, level=level)
 
             if flags:
-                val = val and self.model(self.resourceColl).hasAccessFlags(
-                    resource, user=user, flags=flags)
+                val = val and self.parentModel.hasAccessFlags(resource, user=user, flags=flags)
 
             resourceAccessCache[resourceId] = val
             return val
@@ -300,7 +309,7 @@ class AccessControlMixin(object):
             # controlled model.
             #  This is also the fall-back for Mongo < 3.4, as those versions do
             # not support the aggregation steps that are used.
-            if (not isinstance(self.model(self.resourceColl), AccessControlledModel) or
+            if (not isinstance(self.parentModel, AccessControlledModel) or
                     not getattr(self, '_dbserver_version', None) or
                     getattr(self, '_dbserver_version', None) < (3, 4)):
                 return self._findWithPermissionsFallback(
@@ -308,10 +317,14 @@ class AccessControlMixin(object):
                     **kwargs)
 
             query = query or {}
+            if isinstance(self.resourceColl, (list, tuple)) and len(self.resourceColl) == 2:
+                lookupColl = self.resourceColl[0]
+            else:
+                lookupColl = self.resourceColl
             initialPipeline = [
                 {'$match': query},
                 {'$lookup': {
-                    'from': self.resourceColl,
+                    'from': lookupColl,
                     'localField': self.resourceParent,
                     'foreignField': '_id',
                     'as': '__parent'
