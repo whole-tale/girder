@@ -22,3 +22,6 @@
 [submodule "plugins/table_view"]
 	path = plugins/table_view
 	url = https://github.com/htmdec/table_view
+[submodule "plugins/jsonforms"]
+	path = plugins/jsonforms
+	url = https://github.com/xarthisius/girder-jsonforms
