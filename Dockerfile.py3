@@ -81,11 +81,12 @@ ENV PATH="${VIRTUAL_ENV}/bin:/usr/local/node:${PATH}"
 
 RUN python -m pip install --no-cache-dir \
   -r plugins/wholetale/requirements.txt \
+  -r plugins/jsonforms/requirements.txt \
   -e .[plugins,sftp]   # Most of the plugins is grabbed via plugins/.gitignore
 RUN python -m pip install --no-cache-dir -U pyOpenSSL
 RUN . ~/.nvm/nvm.sh && \
   girder-install web \
-  --plugins=oauth,gravatar,jobs,worker,wt_data_manager,wholetale,wt_home_dir,virtual_resources,wt_versioning,sem_viewer,table_view,homepage,image_previews \
+  --plugins=oauth,gravatar,jobs,worker,wt_data_manager,wholetale,wt_home_dir,virtual_resources,wt_versioning,sem_viewer,table_view,homepage,image_previews,jsonforms \
   && rm -rf /home/girder/.npm /tmp/npm* /girder/node_modules
 
 COPY girder.local.cfg.dev /girder/girder/conf/girder.local.cfg
